@@ -5,7 +5,7 @@
 ```
 ├── cgraphics    # about computer graphics
 │
-├── optimizer    # about optimizer
+├── dl           # about deep learning
 │  
 └── README.md
 ```
