@@ -7,4 +7,5 @@
 
 ---
 
-~~python3.6~~ ~~keras2.1~~
+`python3.6` `keras2.1`
+
