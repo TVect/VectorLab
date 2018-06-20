@@ -22,21 +22,23 @@ class MyVocabProcessor:
         else:
             self._tokenizer = learn.preprocessing.tokenizer
 
-        self.vocab_table, self.vec_rep = self.build_vocab(vcb_file, vec_file)
+        self.index2word, self.vocab_table, self.vec_rep = self.build_vocab(vcb_file, vec_file)
 
 
     def build_vocab(self, vcb_file, vec_file):
         vocab_table = {}
+        index2word = []
         with open(vcb_file) as fr:
             for item in fr:
                 if item.strip() in vocab_table:
                     continue
                 vocab_table[item.strip()]  = len(vocab_table)
-        
+                index2word.append(item.strip())
+
         with open(vec_file) as fr:
             vec_rep = np.array([list(map(float, line.split(","))) for line in fr])
     
-        return vocab_table, vec_rep
+        return index2word, vocab_table, vec_rep
 
 
     def word2id(self, token):
@@ -67,8 +69,17 @@ class MyVocabProcessor:
                 word_ids[idx + start_id + 1] = self.EOS_ID
             yield word_ids
 
+
+    def re_transform(self, id_sents):
+        '''
+        [[id1, id2, id3, ...], [id4, id5, ...],...] -> [[wd1, wd2, wd3, ...], [wd3, wd4, ...],...]
+        '''
+        return [[self.index2word[word_id] for word_id in word_ids] for word_ids in id_sents]
+
+
     def get_embedding_matrix(self):
         return self.vec_rep
+    
 
 
 if __name__ == "__main__":
