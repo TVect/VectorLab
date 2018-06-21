@@ -25,8 +25,8 @@ class Config:
     # Standard names for model modes: (TRAIN, 'train'), (EVAL, 'eval'), (INFER, 'infer')
     mode = tf.contrib.learn.ModeKeys.TRAIN
     use_attention = True
-    input_reverse = True
-    beam_width = 3  # 使用 beam_width 控制是否要进行 beam search
+    input_reverse = False
+    beam_width = 10  # 使用 beam_width 控制是否要进行 beam search
     
     SOS_TOKEN_ID = 1
     EOS_TOKEN_ID = 2
@@ -34,8 +34,8 @@ class Config:
     vocab_size = 100
     emb_size = 100
 
-    en_hidden_units = 100
-    de_hidden_units = 100
+    en_hidden_units = 300
+    de_hidden_units = 300
 
     emb_matrix = None
 
@@ -43,7 +43,7 @@ class Config:
     decay_steps = 1000
     decay_rate = 0.96
     
-    output_dir = os.path.abspath(os.path.join(os.path.curdir, "output"))
+    output_dir = os.path.abspath(os.path.join(os.path.curdir, "output_char"))
 
 
 class BaseChatModel:
@@ -154,7 +154,7 @@ class BaseChatModel:
                                                                    output_layer=projection_layer,
                                                                    length_penalty_weight=0.0)
 
-            self.final_outputs, _, _ = tf.contrib.seq2seq.dynamic_decode(decoder, maximum_iterations=maximum_iterations)
+            self.final_outputs, _, _ = tf.contrib.seq2seq.dynamic_decode(decoder, maximum_iterations=40)
 
         if hasattr(self.final_outputs, "sample_id"):
             self.predictions = self.final_outputs.sample_id
@@ -203,6 +203,9 @@ class BaseChatModel:
         train_summary_dir = os.path.join(self.config.output_dir, "summaries", "train")
         train_summary_writer = tf.summary.FileWriter(train_summary_dir, sess.graph)
         
+        init = tf.global_variables_initializer()
+        sess.run(init)
+
         for batch_en_inputs, batch_de_inputs, batch_de_outputs, batch_en_lengths, batch_de_lengths in data_helper.batch_iter():
             _, steps, loss, summaries = sess.run([self.train_op, self.global_steps, self.loss, self.train_summary_op], 
                                                  feed_dict={self.en_inputs: batch_en_inputs, 
@@ -220,6 +223,10 @@ class BaseChatModel:
 
     def eval(self, sess, en_inputs, de_inputs, de_outputs, en_lengths, de_lengths):
         assert self.config.mode == tf.contrib.learn.ModeKeys.EVAL
+
+        init = tf.global_variables_initializer()
+        sess.run(init)
+
         loss = sess.run([self.loss], feed_dict={self.en_inputs: en_inputs,
                                                 self.en_lengths: en_lengths,
                                                 self.de_inputs: de_inputs,
@@ -231,6 +238,10 @@ class BaseChatModel:
     def infer(self, sess, en_inputs, en_lengths):
         assert self.config.mode == tf.contrib.learn.ModeKeys.INFER
         self._add_saver()
+        
+        init = tf.global_variables_initializer()
+        sess.run(init)
+        
         ckpt = tf.train.get_checkpoint_state(self.checkpoint_dir)
         if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
             self.saver.restore(sess, ckpt.model_checkpoint_path)
