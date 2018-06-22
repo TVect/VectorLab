@@ -40,17 +40,19 @@ def infer():
         with tf.Session() as session:
             in_sent = "How old are you ?"
             
-            parsed_sents = list(tf.contrib.learn.preprocessing.tokenizer([in_sent]))
-            import IPython
-            IPython.embed()
-            en_input, en_length = data_helper.transform(parsed_sents, 
-                                                        sos_padding=True, 
-                                                        eos_padding=True,
-                                                        isTokenId=False)
-            preds = chat_model.infer(session, en_input, en_length)
-            import IPython
-            IPython.embed()
-            print("response:", data_helper.re_transform(preds))
+            while True:
+                in_sent = input("\n====== post: ")
+                parsed_sents = list(tf.contrib.learn.preprocessing.tokenizer([in_sent]))
+                en_input, en_length = data_helper.transform(parsed_sents, 
+                                                            sos_padding=True, 
+                                                            eos_padding=True,
+                                                            isTokenId=False)
+                preds = chat_model.infer(session, en_input, en_length)
+    
+                print("\n====== response:")
+                for de_words in data_helper.re_transform(preds[0].transpose(), ign_eos=True):
+                    print(" ".join(de_words))
+                
 
 
 

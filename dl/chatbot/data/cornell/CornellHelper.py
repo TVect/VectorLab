@@ -68,11 +68,25 @@ class CornellHelper:
         return word_ids, word_ids_lenghts
     
     
-    def re_transform(self, id_sents):
-        return [[self.id2word.get(word_id, "UNK") for word_id in word_ids] for word_ids in id_sents]
+    def re_transform(self, id_sents, ign_sos=False, ign_eos=False, ign_unk=False):
+        re_sents = []
+        for word_ids in id_sents:
+            cur_sent = []
+            for word_id in word_ids:
+                word = self.id2word.get(word_id, "##UNK##")
+                if (ign_sos == True) and (word_id == self.sosTokenId):
+                    continue
+                elif (ign_eos == True) and (word_id == self.eosTokenId):
+                    continue
+                elif (ign_unk == True) and (word == "##UNK##"):
+                    continue
+                cur_sent.append(word)
+            re_sents.append(cur_sent)
+        return re_sents
+                    
+
     
-    
-    def batch_iter(self, epoch=10, batch_size=64):
+    def batch_iter(self, epoch=10, batch_size=128):
         data_cnt = len(self.samples)
         num_batch = int((data_cnt-1)/batch_size)+1
 
