@@ -16,7 +16,7 @@ class BatchHelper:
     
     def __init__(self, record_file):
         self.record_file = record_file
-
+        self.batch_data = self.build()
 
     def build(self):
         file_queue = tf.train.string_input_producer([record_file], num_epochs=10)
@@ -42,12 +42,28 @@ class BatchHelper:
                                     capacity=64,
                                     dynamic_pad=True,
                                     allow_smaller_final_batch=False)
+        return batch_data
 
 
     def batch_iter(self, sess):
+        sess.run(tf.global_variables_initializer())
         sess.run(tf.local_variables_initializer())
-        tf.train.start_queue_runners(sess)
-        while True:
-            rets = sess.run(batch_data)
-            import IPython
-            IPython.embed()
+        
+        coord = tf.train.Coordinator()
+        threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+
+        try:
+            while not coord.should_stop():
+                rets = sess.run(self.batch_data)
+                print(len(rets))
+        except:
+            coord.request_stop()
+        finally:
+            coord.join(threads)
+
+
+if __name__ == "__main__":
+    record_file = "./data/pku.records"
+    helper = BatchHelper(record_file)
+    with tf.Session() as sess:
+        helper.batch_iter(sess)
