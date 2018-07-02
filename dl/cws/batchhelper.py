@@ -23,12 +23,25 @@ class BatchHelper:
         reader = tf.TFRecordReader()
         _, serialized_example  = reader.read(file_queue)
         
+        
+        # shuffle
+        queue = tf.RandomShuffleQueue(capacity=32*20,
+                                      min_after_dequeue=32*10,
+                                      dtypes=tf.string)
+        
+        enqueue_op = queue.enqueue(serialized_example)
+        dequeue_op = queue.dequeue()
+        
+        qr = tf.train.QueueRunner(queue, [enqueue_op] * 4)
+        tf.train.add_queue_runner(qr)
+
+
         context_features = {"seq_length": tf.FixedLenFeature([], dtype=tf.int64)}
         sequence_features = {"chars": tf.FixedLenSequenceFeature([], dtype=tf.int64),
                              "tags": tf.FixedLenSequenceFeature([], dtype=tf.int64)}
-        
+
         context_parsed, sequence_parsed = tf.parse_single_sequence_example(
-            serialized=serialized_example,
+            serialized=dequeue_op,
             context_features=context_features,
             sequence_features=sequence_features
         )
@@ -42,6 +55,7 @@ class BatchHelper:
                                     capacity=64,
                                     dynamic_pad=True,
                                     allow_smaller_final_batch=False)
+     
         return batch_data
 
 
@@ -55,7 +69,7 @@ class BatchHelper:
         try:
             while not coord.should_stop():
                 rets = sess.run(self.batch_data)
-                print(len(rets))
+                print(len(rets), rets[0].shape, rets[1].shape, rets[2].shape)
         except:
             coord.request_stop()
         finally:
