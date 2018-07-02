@@ -2,12 +2,12 @@ import tensorflow as tf
 
 class InputPipeline:
     
-    def __init__(self, is_user_input=False, record_file=None):
+    def __init__(self, is_user_input=False, record_file=None, batch_size=128, num_epochs=10):
         self.is_user_input = is_user_input
         if not self.is_user_input:
             assert record_file is not None
-            self.batch_data = self.build_pipeline(record_file)
-        
+            self.batch_data = self.build_pipeline(record_file, batch_size, num_epochs)
+
     
     def get_inputs(self):
         with tf.variable_scope("input_scope"):
@@ -25,15 +25,15 @@ class InputPipeline:
         return {self.user_inputs: user_inputs, self.in_lengths: in_lengths}
 
 
-    def build_pipeline(self, record_file):
+    def build_pipeline(self, record_file, batch_size, num_epochs):
         with tf.variable_scope("reader"):
-            file_queue = tf.train.string_input_producer([record_file], num_epochs=10)
+            file_queue = tf.train.string_input_producer([record_file], num_epochs=num_epochs)
             reader = tf.TFRecordReader()
             _, serialized_example  = reader.read(file_queue)
 
         with tf.variable_scope("shuffle_queue"):
-            queue = tf.RandomShuffleQueue(capacity=32*20,
-                                          min_after_dequeue=32*10,
+            queue = tf.RandomShuffleQueue(capacity=batch_size*20,
+                                          min_after_dequeue=batch_size*10,
                                           dtypes=tf.string)
             
             enqueue_op = queue.enqueue(serialized_example)
@@ -57,8 +57,8 @@ class InputPipeline:
             batch_data = tf.train.batch({"inputs": sequence_parsed["chars"],
                                          "labels": sequence_parsed["tags"],
                                          "in_lengths": context_parsed["seq_length"]},
-                                        batch_size=32,
-                                        capacity=32*20,
+                                        batch_size=batch_size,
+                                        capacity=batch_size*20,
                                         dynamic_pad=True,
                                         allow_smaller_final_batch=True)
         return batch_data

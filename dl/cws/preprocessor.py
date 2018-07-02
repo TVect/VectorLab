@@ -6,9 +6,11 @@ from MyVocab import MyVocab
 
 class DataPreProcessor:
 
-    def __init__(self):
-        self.vocab = MyVocab()
-
+    def __init__(self, vocab=None):
+        if not vocab:
+            self.vocab = MyVocab()
+        else:
+            self.vocab = vocab
 
     def is_puns(self, c):
         return c in self.vocab.delimiter
@@ -44,11 +46,12 @@ class DataPreProcessor:
                 fw.write("\n")
 
 
-    def to_tfrecords(self, infile, outfile):
+    def to_tfrecords(self, infile, outfile, up_vocab=True):
         '''从 bmes 标注格式转化为 tfrecords 格式'''
         writer = tf.python_io.TFRecordWriter(path=outfile)
         chars = []
         tags = []
+        sents_cnt = 0
         with open(infile, 'r') as f:
             for line in tqdm.tqdm(f):
                 striped_line = line.strip()
@@ -56,17 +59,19 @@ class DataPreProcessor:
                     char, tag = striped_line.split()
                     chars.append(char)
                     tags.append(tag)
-                    if char not in self.vocab.chr2id:
-                        self.vocab.chr2id[char] = len(self.vocab.chr2id)
-                        self.vocab.id2chr.append(char)
-                    if tag not in self.vocab.tag2id:
-                        self.vocab.tag2id[tag] = len(self.vocab.tag2id)
-                        self.vocab.id2tag.append(tag)
-
+                    if up_vocab:
+                        if char not in self.vocab.chr2id:
+                            self.vocab.chr2id[char] = len(self.vocab.chr2id)
+                            self.vocab.id2chr.append(char)
+                        if tag not in self.vocab.tag2id:
+                            self.vocab.tag2id[tag] = len(self.vocab.tag2id)
+                            self.vocab.id2tag.append(tag)
                 else:
+                    sents_cnt += 1
                     writer.write(self.make_example(chars, tags).SerializeToString())
                     chars.clear()
                     tags.clear()
+        print("sents cnt: ", sents_cnt)
 
 
     def make_example(self, chars, tags):
@@ -85,13 +90,25 @@ class DataPreProcessor:
 
 
 if __name__ == "__main__":
+    # trans training file
+    print("\n[...... process training file ......]")
     processor = DataPreProcessor()
     infile = "./data/icwb2-data/training/pku_training.utf8"
     bmes_file = "./data/pku_bmes.utf8"
-    
     processor.tag_bmes(infile, bmes_file)
 
     record_file = "./data/pku.records"
-    processor.to_tfrecords(bmes_file, record_file)
-    
+    processor.to_tfrecords(bmes_file, record_file, up_vocab=True)
     processor.vocab.save("myvocab.pkl")
+    
+    # trans testing file
+    print("\n[...... process testing file ......]")
+    infile = "./data/icwb2-data/gold/pku_test_gold.utf8"
+    bmes_file = "./data/pku_bmes_test.utf8"
+    processor.tag_bmes(infile, bmes_file)
+    
+    record_file = "./data/pku_test.records"
+    processor.to_tfrecords(bmes_file, record_file, up_vocab=False)
+
+    import IPython
+    IPython.embed()

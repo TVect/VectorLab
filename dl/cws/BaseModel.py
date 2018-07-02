@@ -19,7 +19,9 @@ class BaseModel:
 
     def _add_input_pipeline(self):
         self.input_pipeline = InputPipeline(is_user_input=self.hparams.is_user_input,
-                                            record_file=self.hparams.record_file)
+                                            record_file=self.hparams.record_file,
+                                            batch_size=self.hparams.batch_size,
+                                            num_epochs=self.hparams.num_epochs)
         self.inputs, self.in_lengths, self.labels = self.input_pipeline.get_inputs()
 
         self.dropout_ratio = tf.Variable(self.hparams.keep_ratio, trainable=False,
@@ -40,13 +42,13 @@ class BaseModel:
 
     def _add_predictions(self):
         def gen_lstm_cell():
-            return tf.nn.rnn_cell.DropoutWrapper(tf.contrib.rnn.BasicLSTMCell(num_units=self.hparams.num_units), 
+            return tf.nn.rnn_cell.DropoutWrapper(tf.contrib.rnn.BasicLSTMCell(num_units=self.hparams.lstm_units), 
                                                  output_keep_prob=self.rnn_dropout_ratio)
 
         # 多层 lstm
         outputs, output_state_fw, output_state_bw = tf.contrib.rnn.stack_bidirectional_dynamic_rnn(
-            [gen_lstm_cell() for _ in range(self.hparams.num_lstm_layers)], 
-            [gen_lstm_cell() for _ in range(self.hparams.num_lstm_layers)], 
+            [gen_lstm_cell() for _ in range(self.hparams.lstm_layers)], 
+            [gen_lstm_cell() for _ in range(self.hparams.lstm_layers)], 
             inputs=self.input_embedding, 
             sequence_length=self.in_lengths,
             dtype=tf.float32)
@@ -118,6 +120,7 @@ class BaseModel:
                 if _steps % 100 == 0:
                     self.saver.save(sess, self.checkpoint_prefix, global_step=_steps)
         except Exception as e:
+            print("============= Got An Exception =============")
             print(e)
             coord.request_stop()
         finally:

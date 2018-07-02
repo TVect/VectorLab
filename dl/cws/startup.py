@@ -20,23 +20,27 @@ def create_hparams(flags):
             record_file="./data/pku.records",   # tfrecord文件的位置, 在is_user_input=False时, 必须要填写正确的路径
             vocab_size=vocab.vocab_size,
             tags_size=vocab.tags_size,
+
             embed_dim=100,
-            num_units=50,
-            # dense_units = 50
+            
+            lstm_units=50,      # lstm 中隐藏单元的个数
+            lstm_layers = 2,    # lstm 层数
+
             keep_ratio=0.5,
             rnn_output_keep_prob=0.5,
-            
-            num_lstm_layers = 2,    # lstm 层数
 
-            l2_ratio = 1.0,         # l2 正则化
+            l2_ratio = 1.0,     # l2 正则化
             
             # 学习率相关
             lr = 0.001,
             decay_steps = 1000,
             decay_rate = 0.96,
-            epoch = 50,
-            batch_size = 128,
             
+            num_epochs = 10,
+            batch_size = 128,
+
+            evaluate_every = 10,
+            checkpoint_every = 100,
             output_dir = os.path.abspath(os.path.join(os.path.curdir, "model_checkout"))
           )
 
