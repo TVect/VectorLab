@@ -1,4 +1,5 @@
 import tqdm
+import random
 import itertools
 import utils
 import tensorflow as tf
@@ -44,6 +45,21 @@ class DataPreProcessor:
                             fw.write("%s\tM\n" % word[idx])
                         fw.write("%s\tE\n" % word[-1])
                 fw.write("\n")
+
+
+    def train_valid_split(self, bmes_file, train_bmes_file, valid_bmes_file, valid_ratio=0.1):
+        '''对bmes_file进行train/valid的切分'''
+        with open(bmes_file, "r") as fr, \
+            open(train_bmes_file, "w") as fw_train, \
+            open(valid_bmes_file, "w") as fw_valid: 
+            fw_op = fw_train
+            for line in tqdm.tqdm(fr):
+                striped_line = line.strip()
+                if striped_line: 
+                    fw_op.write(striped_line+"\n")
+                else:
+                    fw_op.write("\n")
+                    fw_op = fw_train if random.random() > valid_ratio else fw_valid                    
 
 
     def to_tfrecords(self, infile, outfile, up_vocab=True):
@@ -97,8 +113,14 @@ if __name__ == "__main__":
     bmes_file = "./data/pku_bmes.utf8"
     processor.tag_bmes(infile, bmes_file)
 
-    record_file = "./data/pku.records"
-    processor.to_tfrecords(bmes_file, record_file, up_vocab=True)
+    train_bmes_file = "./data/pku_bmes_train.utf8"
+    valid_bmes_file = "./data/pku_bmes_test.utf8"
+    processor.train_valid_split(bmes_file, train_bmes_file, valid_bmes_file, valid_ratio=0.05)
+    
+    train_record_file = "./data/pku_train.records"
+    valid_record_file = "./data/pku_valid.records"
+    processor.to_tfrecords(train_bmes_file, train_record_file, up_vocab=True)
+    processor.to_tfrecords(valid_bmes_file, valid_record_file, up_vocab=False)
     processor.vocab.save("myvocab.pkl")
     
     # trans testing file

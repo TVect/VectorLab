@@ -1,6 +1,8 @@
 import os
 import tensorflow as tf
 from input_pipeline import InputPipeline
+from layer_utils import idcnn_layer, lstm_layer
+
 
 class BaseModel:
     
@@ -19,10 +21,12 @@ class BaseModel:
 
     def _add_input_pipeline(self):
         self.input_pipeline = InputPipeline(is_user_input=self.hparams.is_user_input,
-                                            record_file=self.hparams.record_file,
+                                            # record_file=self.hparams.record_file,
+                                            train_record=self.hparams.train_record,
+                                            valid_record=self.hparams.valid_record, 
                                             batch_size=self.hparams.batch_size,
                                             num_epochs=self.hparams.num_epochs)
-        self.inputs, self.in_lengths, self.labels = self.input_pipeline.get_inputs()
+        self.in_lengths, self.inputs, self.labels = self.input_pipeline.get_inputs()
 
         self.dropout_ratio = tf.Variable(self.hparams.keep_ratio, trainable=False,
                                          name="dropout")
@@ -41,17 +45,18 @@ class BaseModel:
 
 
     def _add_predictions(self):
-        def gen_lstm_cell():
-            return tf.nn.rnn_cell.DropoutWrapper(tf.contrib.rnn.BasicLSTMCell(num_units=self.hparams.lstm_units), 
-                                                 output_keep_prob=self.rnn_dropout_ratio)
-
-        # 多层 lstm
-        outputs, output_state_fw, output_state_bw = tf.contrib.rnn.stack_bidirectional_dynamic_rnn(
-            [gen_lstm_cell() for _ in range(self.hparams.lstm_layers)], 
-            [gen_lstm_cell() for _ in range(self.hparams.lstm_layers)], 
-            inputs=self.input_embedding, 
-            sequence_length=self.in_lengths,
-            dtype=tf.float32)
+        if self.hparams.layer_mode == "lstm":
+            print("============== use lstm ===============")
+            outputs = lstm_layer(self.input_embedding, 
+                                 self.in_lengths, 
+                                 lstm_layers=self.hparams.lstm_layers, 
+                                 lstm_units=self.hparams.lstm_units,
+                                 rnn_dropout_ratio=self.rnn_dropout_ratio)
+        elif self.hparams.layer_mode == "idcnn":
+            print("============== use idcnn ===============")
+            outputs = idcnn_layer(self.input_embedding, 
+                                  block_cnt=self.hparams.idcnn_blocks, 
+                                  layer_per_block=self.hparams.idcnn_layerpb)
         
         # project layer
         with tf.name_scope("proj_layer"):
@@ -99,33 +104,48 @@ class BaseModel:
         train_op = tf.train.AdamOptimizer(learning_rate)\
                             .minimize(loss, global_step=global_steps)
         tf.summary.scalar("loss", loss)
-        train_summary_op = tf.summary.merge_all()
+        summary_op = tf.summary.merge_all()
         train_summary_dir = os.path.join(self.hparams.output_dir, "summaries", "train")
         train_summary_writer = tf.summary.FileWriter(train_summary_dir, sess.graph)
         
+        valid_summary_dir = os.path.join(self.hparams.output_dir, "summaries", "valid")
+        valid_summary_writer = tf.summary.FileWriter(valid_summary_dir, sess.graph)
+
+
+        test_var = tf.Variable(True)        
         sess.run(tf.global_variables_initializer())
         sess.run(tf.local_variables_initializer())
-        
-        coord = tf.train.Coordinator()
-        threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+
+        sess.run(self.input_pipeline.train_init)
+        sess.run(self.input_pipeline.valid_init)
 
         try:
-            while not coord.should_stop():
-                _, _steps, _loss, _summaries = sess.run([train_op, global_steps, loss, train_summary_op])
+            while True:
+                _, _steps, _loss, _summaries = sess.run([train_op, global_steps, loss, summary_op],
+                                                        feed_dict={self.input_pipeline.train_or_valid: "train"})
                 
-                train_summary_writer.add_summary(_summaries, _steps)
-                
-                if _steps % 10 == 0:
+                if _steps % self.hparams.traininfo_every == 0:
+                    train_summary_writer.add_summary(_summaries, _steps)
                     print("training steps: %s, loss: %s" % (_steps, _loss))
-                if _steps % 100 == 0:
+
+                if _steps % self.hparams.evaluate_every == 0:
+                    # self.input_pipeline.active_mode("valid")
+                    valid_loss, valid_summary = sess.run([loss, summary_op], 
+                                                         feed_dict={self.dropout_ratio: 1.0,
+                                                                    self.rnn_dropout_ratio: 1.0,
+                                                                    self.input_pipeline.train_or_valid: "valid"})
+                    valid_summary_writer.add_summary(valid_summary, _steps)
+                    print("====== valid steps: %s, loss: %s ======" % (_steps, valid_loss))
+                    # self.input_pipeline.active_mode("train")
+                
+                if _steps % self.hparams.checkpoint_every == 0:
                     self.saver.save(sess, self.checkpoint_prefix, global_step=_steps)
+        except tf.errors.OutOfRangeError as e:
+            print("Train: Out of Range")
         except Exception as e:
-            print("============= Got An Exception =============")
+            print("============= Train: Got An Exception =============")
             print(e)
-            coord.request_stop()
-        finally:
-            coord.join(threads)
-        
+
 
     def eval(self):
         pass
