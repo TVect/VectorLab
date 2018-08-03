@@ -20,8 +20,9 @@ class ImageHelper:
 
         for img_name in os.listdir(dirname):
             img_file = os.path.join(dirname, img_name)
+            img = cv2.cvtColor(cv2.imread(img_file, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
             # normalize the images between -1 and 1
-            img_list.append(np.array(cv2.resize(cv2.imread(img_file, cv2.IMREAD_COLOR), (64, 64)))/127.5 - 1)
+            img_list.append(np.array(cv2.resize(img, (64, 64)))/127.5 - 1)
 
         img_array = np.array(img_list)
         del img_list
@@ -38,13 +39,16 @@ class ImageHelper:
         '''保存图片, 输入的 imgs 数值在 [-1, 1] 之间, 会在做保存之前做变换'''
         # imgs should be shape (25, 64, 64, 3)
         imgs = (imgs + 1.0)/2.0
-        fig, axs = plt.subplots(5, 5)
-        cnt = 0
-        for i in range(5):
-            for j in range(5):
-                axs[i,j].imshow(imgs[cnt, :,:,:])
-                axs[i,j].axis('off')
-                cnt += 1
+        img_shape = imgs.shape
+        row_cnt = int(np.sqrt(img_shape[0]))
+        col_cnt = int(np.ceil(img_shape[0]/row_cnt))
+        fig, axs = plt.subplots(row_cnt, col_cnt)
+        for img_id in range(img_shape[0]):
+            row_id = int(img_id / col_cnt)
+            col_id = img_id % col_cnt
+            axs[row_id, col_id].imshow(imgs[img_id, :,:,:])
+            axs[row_id, col_id].axis('off')
+
         fig.savefig("{}.png".format(img_name))
         plt.close()
 
