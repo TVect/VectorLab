@@ -83,7 +83,7 @@ class Generator:
                                           output_shape=[self.batch_size, self.s_h, self.s_w, 3], 
                                           strides=[1,2,2,1], 
                                           name="deconv4")
-        return tf.nn.sigmoid(output4_)
+        return tf.nn.tanh(output4_)
 
 
 if __name__ == "__main__":

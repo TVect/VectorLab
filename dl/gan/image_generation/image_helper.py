@@ -15,11 +15,13 @@ class ImageHelper:
         pass
     
     def iter_images(self, dirname="./AnimeData_NTU/AnimeData/faces", batch_size=25, epoches=10):
+        '''每次返回一个 batch_size 的images, images 归一化到了[-1, 1]'''
         img_list = []
 
         for img_name in os.listdir(dirname):
             img_file = os.path.join(dirname, img_name)
-            img_list.append(np.array(cv2.resize(cv2.imread(img_file, cv2.IMREAD_COLOR), (64, 64)))/255)
+            # normalize the images between -1 and 1
+            img_list.append(np.array(cv2.resize(cv2.imread(img_file, cv2.IMREAD_COLOR), (64, 64)))/127.5 - 1)
 
         img_array = np.array(img_list)
         del img_list
@@ -33,13 +35,13 @@ class ImageHelper:
 
 
     def save_imgs(self, imgs, img_name):
-        r, c = 5, 5
-        noise = np.random.normal(0, 1, (r * c, 100))
-        # gen_imgs should be shape (25, 64, 64, 3)
-        fig, axs = plt.subplots(r, c)
+        '''保存图片, 输入的 imgs 数值在 [-1, 1] 之间, 会在做保存之前做变换'''
+        # imgs should be shape (25, 64, 64, 3)
+        imgs = (imgs + 1.0)/2.0
+        fig, axs = plt.subplots(5, 5)
         cnt = 0
-        for i in range(r):
-            for j in range(c):
+        for i in range(5):
+            for j in range(5):
                 axs[i,j].imshow(imgs[cnt, :,:,:])
                 axs[i,j].axis('off')
                 cnt += 1
