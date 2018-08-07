@@ -14,16 +14,24 @@ class ImageHelper:
     def __init__(self):
         pass
     
-    def iter_images(self, dirname="./AnimeData_NTU/AnimeData/faces", batch_size=25, epoches=10):
+    def iter_images(self, dirname="./AnimeData_NTU", batch_size=25, epoches=10):
         '''每次返回一个 batch_size 的images, images 归一化到了[-1, 1]'''
         img_list = []
 
+        for root, dirs, files in os.walk(dirname):
+            for name in files:
+                if name.endswith(".jpg"):
+                    img_file = os.path.join(root, name)
+                    img = cv2.cvtColor(cv2.imread(img_file, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
+                    # normalize the images between -1 and 1
+                    img_list.append(np.array(cv2.resize(img, (64, 64)))/127.5 - 1)
+        '''
         for img_name in os.listdir(dirname):
             img_file = os.path.join(dirname, img_name)
             img = cv2.cvtColor(cv2.imread(img_file, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
             # normalize the images between -1 and 1
             img_list.append(np.array(cv2.resize(img, (64, 64)))/127.5 - 1)
-
+        '''
         img_array = np.array(img_list)
         del img_list
         img_shape = img_array.shape

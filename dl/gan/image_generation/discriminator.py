@@ -23,15 +23,20 @@ class Discriminator:
         self.batch_size = self.hparams.batch_size
 
         with tf.variable_scope(self.name, reuse=self.reuse):
-            self.filter1_weight = tf.get_variable(name="filter1", shape=[5, 5, 3, 64], 
+            self.filter1_weight = tf.get_variable(name="filter1", shape=[4, 4, 3, 64], 
                                                   initializer=tf.contrib.layers.xavier_initializer())
-            self.filter2_weight = tf.get_variable(name="filter2", shape=[5, 5, 64, 128], 
+            self.filter2_weight = tf.get_variable(name="filter2", shape=[4, 4, 64, 128], 
                                                   initializer=tf.contrib.layers.xavier_initializer())
-            self.filter3_weight = tf.get_variable(name="filter3", shape=[5, 5, 128, 256], 
+            self.filter3_weight = tf.get_variable(name="filter3", shape=[4, 4, 128, 256], 
                                                   initializer=tf.contrib.layers.xavier_initializer())            
-            self.filter4_weight = tf.get_variable(name="filter4", shape=[5, 5, 256, 512], 
+            self.filter4_weight = tf.get_variable(name="filter4", shape=[4, 4, 256, 512], 
                                                   initializer=tf.contrib.layers.xavier_initializer())
-
+            '''
+            self.dense_weight0 = tf.get_variable(name="dense_weight0", shape=[256*4*4, 256], 
+                                                 initializer=tf.contrib.layers.xavier_initializer())
+            self.dense_bias0 = tf.get_variable(name="dense_bias0", shape=[256],
+                                               initializer=tf.zeros_initializer())
+            '''
             self.dense_weight = tf.get_variable(name="dense_weight", shape=[512*4*4, 1], 
                                                  initializer=tf.contrib.layers.xavier_initializer())
             self.dense_bias = tf.get_variable(name="dense_bias", shape=[1],
@@ -58,8 +63,11 @@ class Discriminator:
                                     padding="SAME", name="conv4")
             output4 = tf.nn.leaky_relu(
                 tf.layers.batch_normalization(output4_, axis=-1, name="bn-conv4", reuse=False))
-    
+     
+
             flatten_vec = tf.layers.flatten(output4, name="flatten_vec")
+
+            # flatten_vec0 = tf.nn.leaky_relu(tf.nn.xw_plus_b(flatten_vec, self.dense_weight0, self.dense_bias0))
 
         return tf.nn.xw_plus_b(flatten_vec, self.dense_weight, self.dense_bias)
 

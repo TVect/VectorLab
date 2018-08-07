@@ -25,5 +25,14 @@
 >- [x] optim.Adam rules!
 
 ---
+# 总结
+
+1. AdamOptimizer 中  beta1 在训练中很重要.
+
+之前使用的 AdamOptimizer(learning_rate=0.0002), beta1 取的是默认值 0.9. 训练的结果很糊. 开始训练不久, discriminator 准确率基本就稳定在 1.0 附近了, 再训练到后面 generator 就失效了, 产生了纯色?
+
+后面看到别人代码中一般都将beta1设置为0.5, 尝试了一下, 有效果, discriminator 不再是立即稳定在准确率1.0附近了.
+
+---
 
 `opencv-python 3.4.2.17`

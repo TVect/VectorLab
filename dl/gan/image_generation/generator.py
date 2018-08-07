@@ -40,16 +40,16 @@ class Generator:
             self.dense_bias = tf.get_variable('dense_bias', [64 * 8 * self.s_h16 * self.s_w16],
                                                 initializer=tf.zeros_initializer())
             
-            self.filter1_weight = tf.get_variable('filter1', [5, 5, 64*4, 64*8],
+            self.filter1_weight = tf.get_variable('filter1', [4, 4, 64*4, 64*8],
                                                   initializer=tf.contrib.layers.xavier_initializer())
     
-            self.filter2_weight = tf.get_variable('filter2', [5, 5, 64*2, 64*4],
+            self.filter2_weight = tf.get_variable('filter2', [4, 4, 64*2, 64*4],
                                                   initializer=tf.contrib.layers.xavier_initializer())                                      
     
-            self.filter3_weight = tf.get_variable('filter3', [5, 5, 64*1, 64*2],
+            self.filter3_weight = tf.get_variable('filter3', [4, 4, 64*1, 64*2],
                                                   initializer=tf.contrib.layers.xavier_initializer())                                    
     
-            self.filter4_weight = tf.get_variable('filter4', [5, 5, 3, 64*1],
+            self.filter4_weight = tf.get_variable('filter4', [4, 4, 3, 64*1],
                                                   initializer=tf.contrib.layers.xavier_initializer())                                  
 
     
