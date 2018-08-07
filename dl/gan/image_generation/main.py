@@ -52,7 +52,11 @@ def train():
 
 
 def infer():
-    pass
+    hparams = create_hparams(FLAGS)
+    gan = BasicGAN(hparams)
+    
+    with tf.Session() as sess:
+        gan.infer(sess)
 
 
 def main(args):

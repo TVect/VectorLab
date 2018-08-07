@@ -71,15 +71,19 @@ class BasicGAN:
         self.g_optim = tf.train.AdamOptimizer(learning_rate=self.learning_rate, beta1=self.hparams.beta1).\
                         minimize(self.g_loss, var_list=self.g_vars)
 
+        self._add_saver()
 
-    def train(self, sess):
+    
+    def _add_saver(self):
         # checkpoint 相关
         self.checkpoint_dir = os.path.abspath(os.path.join(self.hparams.checkpoint_dir, "checkpoints"))
-        self.checkpoint_prefix = os.path.join(self.checkpoint_dir, "model")
+        self.checkpoint_prefix = os.path.join(self.checkpoint_dir, "model_{}".format(self.hparams.model))
         if not os.path.exists(self.checkpoint_dir):
             os.makedirs(self.checkpoint_dir)
         self.saver = tf.train.Saver(tf.global_variables(), max_to_keep=self.hparams.max_to_keep)
 
+
+    def train(self, sess):
         # loss summaries
         d_summary_op = tf.summary.merge([tf.summary.histogram("d_real_prob", tf.sigmoid(self.real_logits)),
                                          tf.summary.histogram("d_fake_prob", tf.sigmoid(self.fake_logits)),
@@ -148,3 +152,21 @@ class BasicGAN:
                                        img_name="{}/fake-{}".format(self.hparams.sample_dir, num_epoch))
                 # save model per epoch
                 self.saver.save(sess, self.checkpoint_prefix, global_step=num_epoch)
+
+
+    def infer(self, sess):
+        # 加载模型
+        ckpt = tf.train.get_checkpoint_state(self.checkpoint_dir)
+        if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
+            self.saver.restore(sess, ckpt.model_checkpoint_path)
+        
+        image_helper = ImageHelper()
+
+        fake_imgs = sess.run(
+            self.fake_imgs, 
+            feed_dict={self.rand_noises: np.random.normal(size=[self.batch_size, self.noise_dim])})
+        img_name = "{}/infer-image".format(self.hparams.sample_dir)
+        image_helper.save_imgs(fake_imgs, 
+                               img_name=img_name)
+        
+        tf.logging.info("====== generate images in file: {} ======".format(img_name))
