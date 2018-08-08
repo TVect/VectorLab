@@ -26,8 +26,12 @@ class BasicGAN:
         self.generator = Generator(self.hparams)
         self.discriminator = Discriminator(self.hparams)
         
-        self.rand_noises = tf.placeholder(dtype=tf.float32, shape=[None, self.noise_dim], name="rand_noises")
-        self.real_imgs = tf.placeholder(dtype=tf.float32, shape=[None, 64, 64, 3], name="real_imgs")
+        self.rand_noises = tf.placeholder(dtype=tf.float32, 
+                                          shape=[self.batch_size, self.noise_dim], 
+                                          name="rand_noises")
+        self.real_imgs = tf.placeholder(dtype=tf.float32, 
+                                        shape=[self.batch_size, 64, 64, 3], 
+                                        name="real_imgs")
         self.fake_imgs = self.generator.generate(self.rand_noises)
         self.fake_logits = self.discriminator.discriminate(self.fake_imgs)
         self.real_logits = self.discriminator.discriminate(self.real_imgs, reuse=True)
@@ -57,8 +61,25 @@ class BasicGAN:
                 self.d_loss = (self.d_loss_fake + self.d_loss_real) / 2.0
                 self.g_loss = tf.losses.mean_squared_error(tf.ones_like(self.fake_logits), self.fake_logits)
             elif self.hparams.model == "WGAN":
-                pass
+                self.d_loss_real = tf.reduce_mean(self.real_logits)
+                self.d_loss_fake = tf.reduce_mean(self.fake_logits)
+                self.d_loss = self.d_loss_fake - self.d_loss_real
+                self.g_loss = -self.d_loss_fake
             elif self.hparams.model == "WGAN-GP":
+                '''Gradient Penalty'''
+                rand_alpha = tf.random_uniform(shape=[self.batch_size, 1, 1, 1], 
+                                               minval=0, maxval=1, name="rand_alpha")
+                inter_imgs = self.real_imgs * rand_alpha + self.fake_imgs * (1-rand_alpha) 
+                inter_logits = self.discriminator.discriminate(inter_imgs, reuse=True)
+                inter_grads = tf.gradients(inter_logits, inter_imgs)[0]
+                slops = tf.sqrt(tf.reduce_sum(tf.square(inter_grads), axis=[1,2,3]))
+                penalty = tf.reduce_mean(tf.square(slops - 1))
+
+                self.d_loss_real = tf.reduce_mean(self.real_logits)
+                self.d_loss_fake = tf.reduce_mean(self.fake_logits)
+                self.d_loss = self.d_loss_fake - self.d_loss_real + self.hparams.penalty_coef * penalty
+                self.g_loss = -self.d_loss_fake
+            else:
                 pass
 
         tvars = tf.trainable_variables()
@@ -71,9 +92,24 @@ class BasicGAN:
         self.g_optim = tf.train.AdamOptimizer(learning_rate=self.learning_rate, beta1=self.hparams.beta1).\
                         minimize(self.g_loss, var_list=self.g_vars)
 
+        if self.hparams.model == "WGAN":
+            self.d_optim = tf.train.RMSPropOptimizer(5e-5).\
+                            minimize(self.d_loss, var_list=self.d_vars, global_step=self.global_step)
+            self.g_optim = tf.train.RMSPropOptimizer(5e-5).\
+                            minimize(self.g_loss, var_list=self.g_vars)
+            self.clip_min = self.hparams.clip_min
+            self.clip_max = self.hparams.clip_max
+            with tf.control_dependencies([self.d_optim]):
+#                 self.d_optim = tf.group(
+#                     *(tf.assign(var, tf.clip_by_value(var, self.clip_min, self.clip_max)) 
+#                       for var in tvars if ("discriminator/filter" in var.name) or 
+#                       ("discriminator/dense_weight" in var.name)))
+                self.d_optim = tf.group(
+                    *(tf.assign(var, tf.clip_by_value(var, self.clip_min, self.clip_max)) for var in self.d_vars))
+
         self._add_saver()
 
-    
+
     def _add_saver(self):
         # checkpoint 相关
         self.checkpoint_dir = os.path.abspath(os.path.join(self.hparams.checkpoint_dir, "checkpoints"))
@@ -102,7 +138,7 @@ class BasicGAN:
         image_helper = ImageHelper()
         
         sess.run(tf.global_variables_initializer())
-        
+
         for num_epoch, num_batch, batch_images in image_helper.iter_images(
                                                     dirname=self.hparams.data_dir,
                                                     batch_size=self.batch_size, 
@@ -114,7 +150,7 @@ class BasicGAN:
                     feed_dict={
                         self.rand_noises: np.random.normal(size=[self.batch_size, self.noise_dim]),
                         self.real_imgs: batch_images})
-                if current_step == self.hparams.d_pretrain - 1:
+                if current_step == self.hparams.d_pretrain:
                     tf.logging.info("==== pre-train ==== current_step:{}, d_loss:{}, d_accuarcy:{}"\
                                     .format(current_step, d_loss, d_accuarcy))
             else:
@@ -159,7 +195,7 @@ class BasicGAN:
         ckpt = tf.train.get_checkpoint_state(self.checkpoint_dir)
         if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
             self.saver.restore(sess, ckpt.model_checkpoint_path)
-        
+
         image_helper = ImageHelper()
 
         fake_imgs = sess.run(
@@ -168,5 +204,6 @@ class BasicGAN:
         img_name = "{}/infer-image".format(self.hparams.sample_dir)
         image_helper.save_imgs(fake_imgs, 
                                img_name=img_name)
-        
+
         tf.logging.info("====== generate images in file: {} ======".format(img_name))
+

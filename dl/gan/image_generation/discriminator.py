@@ -51,19 +51,27 @@ class Discriminator:
 
             output2_ = tf.nn.conv2d(input=output1, filter=self.filter2_weight, strides=[1, 2, 2, 1], 
                                     padding="SAME", name="conv2")
-            output2 = tf.nn.leaky_relu(
-                tf.layers.batch_normalization(output2_, axis=-1, name="bn-conv2", reuse=False))
-    
+            if self.hparams.model in ["WGAN", "WGAN-CP"]:
+                output2 = tf.nn.leaky_relu(output2_)
+            else:
+                output2 = tf.nn.leaky_relu(
+                    tf.layers.batch_normalization(output2_, axis=-1, name="bn-conv2", reuse=False))
+            
             output3_ = tf.nn.conv2d(input=output2, filter=self.filter3_weight, strides=[1, 2, 2, 1], 
                                     padding="SAME", name="conv3")
-            output3 = tf.nn.leaky_relu(
-                tf.layers.batch_normalization(output3_, axis=-1, name="bn-conv3", reuse=False))
-    
+            if self.hparams.model in ["WGAN", "WGAN-CP"]: 
+                output3 = tf.nn.leaky_relu(output3_)
+            else:
+                output3 = tf.nn.leaky_relu(
+                    tf.layers.batch_normalization(output3_, axis=-1, name="bn-conv3", reuse=False))
+
             output4_ = tf.nn.conv2d(input=output3, filter=self.filter4_weight, strides=[1, 2, 2, 1], 
                                     padding="SAME", name="conv4")
-            output4 = tf.nn.leaky_relu(
-                tf.layers.batch_normalization(output4_, axis=-1, name="bn-conv4", reuse=False))
-     
+            if self.hparams.model in ["WGAN", "WGAN-CP"]:
+                output4 = tf.nn.leaky_relu(output4_)
+            else:
+                output4 = tf.nn.leaky_relu(
+                    tf.layers.batch_normalization(output4_, axis=-1, name="bn-conv4", reuse=False))
 
             flatten_vec = tf.layers.flatten(output4, name="flatten_vec")
 

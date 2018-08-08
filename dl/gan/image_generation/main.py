@@ -3,7 +3,7 @@ from basic_gan import BasicGAN
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
-tf.app.flags.DEFINE_string("model", "GAN", "model: GAN | LSGAN | WGAN")
+tf.app.flags.DEFINE_string("model", "WGAN-GP", "model: GAN | LSGAN | WGAN | WGAN-GP")
 tf.app.flags.DEFINE_string("mode", "train", "mode: train | infer")
 tf.app.flags.DEFINE_integer("noise_dim", 100, "noise dim: default 100")
 tf.app.flags.DEFINE_float("learning_rate", 0.0002, "learning rate: default 0.001")
@@ -12,7 +12,7 @@ tf.app.flags.DEFINE_integer("epoches", 1000, "epoches: default 100")
 tf.app.flags.DEFINE_integer("batch_size", 64, "batch_size: default 64")
 
 tf.app.flags.DEFINE_integer("d_pretrain", 0, "discriminator pretrain")
-tf.app.flags.DEFINE_integer("d_schedule", 1, "train discriminator more ...")
+tf.app.flags.DEFINE_integer("d_schedule", 25, "train discriminator more ...")
 
 tf.app.flags.DEFINE_string("checkpoint_dir", "./checkpoint", 
                            "Directory name to save the checkpoints [checkpoint]")
@@ -20,6 +20,13 @@ tf.app.flags.DEFINE_string("data_dir", "./AnimeData_NTU", "Root directory of dat
 tf.app.flags.DEFINE_string("sample_dir", "./sample", "directory of generated images")
 tf.app.flags.DEFINE_integer("log_interval", 100, "log interval")
 tf.app.flags.DEFINE_integer("max_to_keep", 10, "max to keep")
+
+# WGAN 中权重裁剪的上下限
+tf.app.flags.DEFINE_float("clip_min", -0.01, "min value when clip weights, used in WGAN")
+tf.app.flags.DEFINE_float("clip_max", 0.01, "max value when clip weights, used in WGAN")
+
+# WGAN-GP 中 gradient_penalty 系数
+tf.app.flags.DEFINE_float("penalty_coef", 0.25, "gradient_penalty coef in WGAN-GP")
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -40,7 +47,12 @@ def create_hparams(flags=None):
             data_dir = FLAGS.data_dir,
             sample_dir = FLAGS.sample_dir,
             log_interval = FLAGS.log_interval,
-            max_to_keep = FLAGS.max_to_keep)
+            max_to_keep = FLAGS.max_to_keep,
+            
+            clip_min = FLAGS.clip_min,
+            clip_max = FLAGS.clip_max,
+            
+            penalty_coef = FLAGS.penalty_coef)
 
 
 def train():

@@ -1,4 +1,3 @@
-参考了 [DCGAN](https://github.com/carpedm20/DCGAN-tensorflow) 的实现
 
 # Tips
 
@@ -54,6 +53,14 @@ Architecture guidelines for stable Deep Convolutional GANs
 后面看到别人代码中一般都将beta1设置为0.5, 尝试了一下, 有效果, discriminator 不再是立即稳定在准确率1.0附近了. 
 
 对了, DCGAN的文章中也有提到. > leaving the momentum term β1 at the suggested value of 0.9 resulted in training oscillation and instability while reducing it to 0.5 helped stabilize training.
+
+---
+
+# 参考资料
+
+- [各种 GAN 的代码实现 tensorflow-generative-model-collections](https://github.com/hwalsuklee/tensorflow-generative-model-collections)
+
+- [代码 DCGAN](https://github.com/carpedm20/DCGAN-tensorflow)
 
 ---
 
