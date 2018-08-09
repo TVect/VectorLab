@@ -51,7 +51,7 @@ class Discriminator:
 
             output2_ = tf.nn.conv2d(input=output1, filter=self.filter2_weight, strides=[1, 2, 2, 1], 
                                     padding="SAME", name="conv2")
-            if self.hparams.model in ["WGAN", "WGAN-CP"]:
+            if self.hparams.model in ["WGAN", "WGAN-GP"]:
                 output2 = tf.nn.leaky_relu(output2_)
             else:
                 output2 = tf.nn.leaky_relu(
@@ -59,7 +59,7 @@ class Discriminator:
             
             output3_ = tf.nn.conv2d(input=output2, filter=self.filter3_weight, strides=[1, 2, 2, 1], 
                                     padding="SAME", name="conv3")
-            if self.hparams.model in ["WGAN", "WGAN-CP"]: 
+            if self.hparams.model in ["WGAN", "WGAN-GP"]: 
                 output3 = tf.nn.leaky_relu(output3_)
             else:
                 output3 = tf.nn.leaky_relu(
@@ -67,7 +67,7 @@ class Discriminator:
 
             output4_ = tf.nn.conv2d(input=output3, filter=self.filter4_weight, strides=[1, 2, 2, 1], 
                                     padding="SAME", name="conv4")
-            if self.hparams.model in ["WGAN", "WGAN-CP"]:
+            if self.hparams.model in ["WGAN", "WGAN-GP"]:
                 output4 = tf.nn.leaky_relu(output4_)
             else:
                 output4 = tf.nn.leaky_relu(

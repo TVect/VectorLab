@@ -44,7 +44,7 @@ Architecture guidelines for stable Deep Convolutional GANs
 
 ---
 
-# 总结
+# 其他
 
 1. AdamOptimizer 中  beta1 在训练中很重要.
 
@@ -53,6 +53,16 @@ Architecture guidelines for stable Deep Convolutional GANs
 后面看到别人代码中一般都将beta1设置为0.5, 尝试了一下, 有效果, discriminator 不再是立即稳定在准确率1.0附近了. 
 
 对了, DCGAN的文章中也有提到. > leaving the momentum term β1 at the suggested value of 0.9 resulted in training oscillation and instability while reducing it to 0.5 helped stabilize training.
+
+2. 修改为 WGAN-GP 之后, 并没有再出现前面提到的训练到很后面 generator 失效, 产生纯色的问题.
+
+---
+
+# 结果展示
+
+![WGAN-GP 生成的图片](./infer-image.png)
+
+![脸像检测的结果](./baseline_result.png)
 
 ---
 
