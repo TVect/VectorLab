@@ -60,9 +60,12 @@ Architecture guidelines for stable Deep Convolutional GANs
 
 # 结果展示
 
-![WGAN-GP 生成的图片](./infer-image.png)
+WGAN-GP生成的图片和脸像检测的结果
 
-![脸像检测的结果](./baseline_result.png)
+<div align="center">
+<img src="https://github.com/TVect/VectorLab/blob/master/dl/gan/image_generation/sample/infer-image.png" height="315" width="420" >
+<img src="https://github.com/TVect/VectorLab/blob/master/dl/gan/image_generation/sample/baseline_result.png" height="315" width="420" >
+</div>
 
 ---
 
