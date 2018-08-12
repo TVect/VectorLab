@@ -26,12 +26,21 @@ class BasicGAN:
         self.generator = Generator(self.hparams)
         self.discriminator = Discriminator(self.hparams)
         
+        self._add_placeholder()
+        self._add_loss()
+        self._add_optim()
+        self._add_saver()
+
+
+    def _add_placeholder(self):
         self.rand_noises = tf.placeholder(dtype=tf.float32, 
                                           shape=[self.batch_size, self.noise_dim], 
                                           name="rand_noises")
         self.real_imgs = tf.placeholder(dtype=tf.float32, 
                                         shape=[self.batch_size, 64, 64, 3], 
                                         name="real_imgs")
+
+    def _add_loss(self):
         self.fake_imgs = self.generator.generate(self.rand_noises)
         self.fake_logits = self.discriminator.discriminate(self.fake_imgs)
         self.real_logits = self.discriminator.discriminate(self.real_imgs, reuse=True)
@@ -39,49 +48,50 @@ class BasicGAN:
         self.d_accuarcy = (tf.reduce_mean(tf.cast(self.real_logits>0, tf.float32)) + 
                            tf.reduce_mean(tf.cast(self.fake_logits<0, tf.float32))) / 2
 
-        with tf.variable_scope("loss"):
-            if self.hparams.model == "GAN":
-                # basic gan
-                self.d_loss_real = tf.losses.sigmoid_cross_entropy(tf.ones_like(self.real_logits), 
-                                                                   logits=self.real_logits, 
-                                                                   label_smoothing=0.2)
-                self.d_loss_fake = tf.losses.sigmoid_cross_entropy(tf.zeros_like(self.fake_logits), 
-                                                                   logits=self.fake_logits,
-                                                                   label_smoothing=0.2)
-                self.d_loss = (self.d_loss_fake + self.d_loss_real) / 2.0
-                self.g_loss = tf.losses.sigmoid_cross_entropy(tf.ones_like(self.fake_logits),
-                                                              logits=self.fake_logits,
-                                                              label_smoothing=0.2)
-            elif self.hparams.model == "LSGAN":
-                # lease square gan
-                self.d_loss_real = tf.losses.mean_squared_error(tf.ones_like(self.real_logits), 
-                                                                self.real_logits)
-                self.d_loss_fake = tf.losses.mean_squared_error(tf.zeros_like(self.fake_logits), 
-                                                                self.fake_logits)
-                self.d_loss = (self.d_loss_fake + self.d_loss_real) / 2.0
-                self.g_loss = tf.losses.mean_squared_error(tf.ones_like(self.fake_logits), self.fake_logits)
-            elif self.hparams.model == "WGAN":
-                self.d_loss_real = tf.reduce_mean(self.real_logits)
-                self.d_loss_fake = tf.reduce_mean(self.fake_logits)
-                self.d_loss = self.d_loss_fake - self.d_loss_real
-                self.g_loss = -self.d_loss_fake
-            elif self.hparams.model == "WGAN-GP":
-                '''Gradient Penalty'''
-                rand_alpha = tf.random_uniform(shape=[self.batch_size, 1, 1, 1], 
-                                               minval=0, maxval=1, name="rand_alpha")
-                inter_imgs = self.real_imgs * rand_alpha + self.fake_imgs * (1-rand_alpha) 
-                inter_logits = self.discriminator.discriminate(inter_imgs, reuse=True)
-                inter_grads = tf.gradients(inter_logits, inter_imgs)[0]
-                slops = tf.sqrt(tf.reduce_sum(tf.square(inter_grads), axis=[1,2,3]))
-                penalty = tf.reduce_mean(tf.square(slops - 1))
+        if self.hparams.model == "GAN":
+            # basic gan
+            self.d_loss_real = tf.losses.sigmoid_cross_entropy(tf.ones_like(self.real_logits), 
+                                                               logits=self.real_logits, 
+                                                               label_smoothing=0.2)
+            self.d_loss_fake = tf.losses.sigmoid_cross_entropy(tf.zeros_like(self.fake_logits), 
+                                                               logits=self.fake_logits,
+                                                               label_smoothing=0.2)
+            self.d_loss = (self.d_loss_fake + self.d_loss_real) / 2.0
+            self.g_loss = tf.losses.sigmoid_cross_entropy(tf.ones_like(self.fake_logits),
+                                                          logits=self.fake_logits,
+                                                          label_smoothing=0.2)
+        elif self.hparams.model == "LSGAN":
+            # lease square gan
+            self.d_loss_real = tf.losses.mean_squared_error(tf.ones_like(self.real_logits), 
+                                                            self.real_logits)
+            self.d_loss_fake = tf.losses.mean_squared_error(tf.zeros_like(self.fake_logits), 
+                                                            self.fake_logits)
+            self.d_loss = (self.d_loss_fake + self.d_loss_real) / 2.0
+            self.g_loss = tf.losses.mean_squared_error(tf.ones_like(self.fake_logits), self.fake_logits)
+        elif self.hparams.model == "WGAN":
+            self.d_loss_real = tf.reduce_mean(self.real_logits)
+            self.d_loss_fake = tf.reduce_mean(self.fake_logits)
+            self.d_loss = self.d_loss_fake - self.d_loss_real
+            self.g_loss = -self.d_loss_fake
+        elif self.hparams.model == "WGAN-GP":
+            '''Gradient Penalty'''
+            rand_alpha = tf.random_uniform(shape=[self.batch_size, 1, 1, 1], 
+                                           minval=0, maxval=1, name="rand_alpha")
+            inter_imgs = self.real_imgs * rand_alpha + self.fake_imgs * (1-rand_alpha) 
+            inter_logits = self.discriminator.discriminate(inter_imgs, reuse=True)
+            inter_grads = tf.gradients(inter_logits, inter_imgs)[0]
+            slops = tf.sqrt(tf.reduce_sum(tf.square(inter_grads), axis=[1,2,3]))
+            penalty = tf.reduce_mean(tf.square(slops - 1))
 
-                self.d_loss_real = tf.reduce_mean(self.real_logits)
-                self.d_loss_fake = tf.reduce_mean(self.fake_logits)
-                self.d_loss = self.d_loss_fake - self.d_loss_real + self.hparams.penalty_coef * penalty
-                self.g_loss = -self.d_loss_fake
-            else:
-                pass
+            self.d_loss_real = tf.reduce_mean(self.real_logits)
+            self.d_loss_fake = tf.reduce_mean(self.fake_logits)
+            self.d_loss = self.d_loss_fake - self.d_loss_real + self.hparams.penalty_coef * penalty
+            self.g_loss = -self.d_loss_fake
+        else:
+            pass
 
+
+    def _add_optim(self):
         tvars = tf.trainable_variables()
         self.d_vars = [var for var in tvars if 'discriminator' in var.name]
         self.g_vars = [var for var in tvars if 'generator' in var.name]
@@ -106,8 +116,6 @@ class BasicGAN:
 #                       ("discriminator/dense_weight" in var.name)))
                 self.d_optim = tf.group(
                     *(tf.assign(var, tf.clip_by_value(var, self.clip_min, self.clip_max)) for var in self.d_vars))
-
-        self._add_saver()
 
 
     def _add_saver(self):
