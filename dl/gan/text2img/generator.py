@@ -9,6 +9,7 @@ Generator
 import math
 import numpy as np
 import tensorflow as tf
+from cond_encoder import CondEncoder
 
 
 class Generator:
@@ -27,14 +28,9 @@ class Generator:
         self.batch_size = self.hparams.batch_size
         self.tag_dim = self.hparams.tag_dim
 
+        self.cond_encoder = CondEncoder(self.hparams)
         # 64*64 <- 32 * 32 <- 16*16 <- 8*8 <- 4*4
         with tf.variable_scope(self.name, reuse=self.reuse):
-            self.tag_weight = tf.get_variable("tag_weight", 
-                                              [22, self.tag_dim],
-                                              initializer=tf.contrib.layers.xavier_initializer())
-            self.tag_bias = tf.get_variable('tag_bias', [self.tag_dim],
-                                            initializer=tf.zeros_initializer())
-
             self.dense_weight = tf.get_variable('dense_weight', 
                                                 [self.noise_dim+self.tag_dim, 64*8*4*4],
                                                 initializer=tf.contrib.layers.xavier_initializer())
@@ -42,16 +38,16 @@ class Generator:
             self.dense_bias = tf.get_variable('dense_bias', [64*8*4*4],
                                                 initializer=tf.zeros_initializer())
             
-            self.filter1_weight = tf.get_variable('filter1', [4, 4, 64*4, 64*8],
+            self.filter1_weight = tf.get_variable('filter1', [5, 5, 64*4, 64*8],
                                                   initializer=tf.contrib.layers.xavier_initializer())
     
-            self.filter2_weight = tf.get_variable('filter2', [4, 4, 64*2, 64*4],
+            self.filter2_weight = tf.get_variable('filter2', [5, 5, 64*2, 64*4],
                                                   initializer=tf.contrib.layers.xavier_initializer())                                      
     
-            self.filter3_weight = tf.get_variable('filter3', [4, 4, 64*1, 64*2],
+            self.filter3_weight = tf.get_variable('filter3', [5, 5, 64*1, 64*2],
                                                   initializer=tf.contrib.layers.xavier_initializer())                                    
     
-            self.filter4_weight = tf.get_variable('filter4', [4, 4, 3, 64*1],
+            self.filter4_weight = tf.get_variable('filter4', [5, 5, 3, 64*1],
                                                   initializer=tf.contrib.layers.xavier_initializer())                                  
 
 
@@ -60,11 +56,11 @@ class Generator:
         @param tag_oh: one hot encoding of the tag
         '''
         with tf.variable_scope(self.name, reuse=reuse):
-            tag_vec = tf.nn.leaky_relu(tf.nn.xw_plus_b(tag_oh, self.tag_weight, self.tag_bias))
+            tag_vec = self.cond_encoder.get_representation(tag_oh)
 
             output0_ = tf.reshape(
                 tf.nn.xw_plus_b(tf.concat([noises, tag_vec], axis=-1), self.dense_weight, self.dense_bias), 
-                [-1, 4, 4, 64*8])
+                [-1, 4, 4, 512])
             output0 = tf.nn.relu(
                 tf.layers.batch_normalization(output0_, axis=-1, name="bn-linear"))
 

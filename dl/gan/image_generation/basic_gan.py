@@ -88,7 +88,7 @@ class BasicGAN:
             self.d_loss = self.d_loss_fake - self.d_loss_real + self.hparams.penalty_coef * penalty
             self.g_loss = -self.d_loss_fake
         else:
-            pass
+            raise NotImplementedError
 
 
     def _add_optim(self):

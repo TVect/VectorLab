@@ -31,30 +31,36 @@ class ImageHelper:
         self.patterns = re.compile("(.+ hair) (.+ eyes)")
 
     def iter_images(self, 
-                    imgs_dir="./AnimeData_NTU/extra_data/images", 
-                    tags_file="./AnimeData_NTU/extra_data/tags.csv",
+                    imgs_dirs=["./AnimeData_NTU/extra_data/images", "./AnimeData_NTU/AnimeData/faces"],
+                    tags_files=["./AnimeData_NTU/extra_data/tags.csv", "./AnimeData_NTU/AnimeData/tags.csv"],
                     batch_size=25, 
                     epoches=10):
         '''每次返回一个 batch_size 的images, images 归一化到了[-1, 1]'''
         img_list = []
         tag_list = []
-        img_tags = {}
-        
-        with open(tags_file) as fr:
-            for line in fr:
-                id, des = line.split(",")
-                img_tags[id] = self.patterns.match(des).groups()
 
-        for root, dirs, files in os.walk(imgs_dir):
-            for name in files:
-                if name.endswith(".jpg"):
-                    img_file = os.path.join(root, name)
-                    img = cv2.cvtColor(cv2.imread(img_file, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
-                    # normalize the images between -1 and 1
-                    img_list.append(np.array(cv2.resize(img, (64, 64)))/127.5 - 1)
-                    # tag_list.append(self.tags2vec(img_tags[name.split(".")[0]]))
-                    tag = img_tags[name.split(".")[0]]
-                    tag_list.append(self.tag2id(tag))
+        for _id in range(len(imgs_dirs)):
+            imgs_dir = imgs_dirs[_id]
+            tags_file = tags_files[_id]
+
+            img_tags = {}
+            with open(tags_file) as fr:
+                for line in fr:
+                    id, des = line.split(",")
+                    img_tags[id] = self.patterns.match(des).groups()
+
+            for root, dirs, files in os.walk(imgs_dir):
+                for name in files:
+                    if name.endswith(".jpg"):
+                        img_id = name.split(".")[0]
+                        if img_id in img_tags:
+                            img_file = os.path.join(root, name)
+                            img = cv2.cvtColor(cv2.imread(img_file, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
+                            # normalize the images between -1 and 1
+                            img_list.append(np.array(cv2.resize(img, (64, 64)))/127.5 - 1)
+                            # tag_list.append(self.tags2vec(img_tags[name.split(".")[0]]))
+                            tag = img_tags[img_id]
+                            tag_list.append(self.tag2id(tag))
 
         img_array = np.array(img_list)
         tag_array = np.array(tag_list)
@@ -84,15 +90,10 @@ class ImageHelper:
 
 
     def get_test_tags(self):
-        str_tags = ["blue hair blue eyes", "blue hair blue eyes", "blue hair blue eyes",
-                    "blue hair blue eyes", "blue hair blue eyes", "blue hair green eyes",
-                    "blue hair green eyes", "blue hair green eyes", "blue hair green eyes",
-                    "blue hair green eyes", "blue hair red eyes", "blue hair red eyes",
-                    "blue hair red eyes", "blue hair red eyes", "blue hair red eyes",
-                    "green hair blue eyes", "green hair blue eyes", "green hair blue eyes",
-                    "green hair blue eyes", "green hair blue eyes", "green hair red eyes",
-                    "green hair red eyes", "green hair red eyes", "green hair red eyes",
-                    "green hair red eyes"]
+        str_tags = ["red hair red eyes"] * 8 + ["red hair blue eyes"] * 8 + ["red hair green eyes"] * 8 + \
+                    ["blue hair red eyes"] * 8 + ["blue hair blue eyes"] * 8 + ["blue hair green eyes"] * 8 + \
+                    ["green hair red eyes"] * 8 + ["green hair blue eyes"] * 8
+
         batch_tags = np.zeros([len(str_tags), self.tag_dim])
         for idx, tag in enumerate(str_tags):
             tag_ids = self.tag2id(self.patterns.match(tag).groups())
@@ -142,11 +143,11 @@ class ImageHelper:
 if __name__ == "__main__":
     img_helper = ImageHelper()
     
-    tags = img_helper.get_test_tags()
-    import IPython
-    IPython.embed()
-#     for batch_data in img_helper.iter_images():
-#         print(batch_data)
-#         import IPython
-#         IPython.embed()
-#         exit(0)
+#     tags = img_helper.get_test_tags()
+#     import IPython
+#     IPython.embed()
+    for batch_data in img_helper.iter_images():
+        print(batch_data)
+        import IPython
+        IPython.embed()
+        exit(0)

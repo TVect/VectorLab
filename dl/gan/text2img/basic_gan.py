@@ -47,12 +47,19 @@ class BasicGAN:
         self.rotated_imgs = tf.contrib.image.rotate(images_filped, angles, interpolation='NEAREST')
 
         self.fake_imgs = self.generator.generate(self.rand_noises, self.tags)
-        # fake image, right tag 的 logits
+        # fake images, right tag 的 logits
         self.fake_logits = self.discriminator.discriminate(self.fake_imgs, self.tags)
         # real images, wrong tag 的 logits !!! 新增的一种 loss
         self.wtag_logits = self.discriminator.discriminate(self.rotated_imgs, self.wrong_tags, reuse=True)
         # real images, right tag 的 logits
         self.real_logits = self.discriminator.discriminate(self.real_imgs, self.tags, reuse=True)
+
+        self.d_accuarcy = (tf.reduce_mean(tf.cast(self.real_logits>0, tf.float32)) + 
+                           tf.reduce_mean(tf.cast(self.fake_logits<0, tf.float32)) + 
+                           tf.reduce_mean(tf.cast(self.wtag_logits<0, tf.float32))) / 3.0
+
+#         self.d_accuarcy = (tf.reduce_mean(tf.cast(self.real_logits>0, tf.float32)) + 
+#                            tf.reduce_mean(tf.cast(self.fake_logits<0, tf.float32))) / 2.0
 
         '''
         # basic gan
@@ -65,27 +72,32 @@ class BasicGAN:
         self.d_loss_wtag = tf.losses.sigmoid_cross_entropy(tf.zeros_like(self.wtag_logits), 
                                                            logits=self.wtag_logits, 
                                                            label_smoothing=0.2)
-        # self.d_loss = self.d_loss_real + (self.d_loss_fake + self.d_loss_wtag) / 2.0
-        self.d_loss = self.d_loss_real + self.d_loss_fake
+        self.d_loss = self.d_loss_real + (self.d_loss_fake + self.d_loss_wtag) / 2.0
+        # self.d_loss = self.d_loss_real + self.d_loss_fake
         self.g_loss = tf.losses.sigmoid_cross_entropy(tf.ones_like(self.fake_logits),
                                                       logits=self.fake_logits,
                                                       label_smoothing=0.2)
         '''
         # Gradient Penalty
-        alpha = tf.random_uniform(shape=self.rotated_imgs.get_shape(), minval=0.,maxval=1.)
-        differences = self.real_imgs - self.rotated_imgs
-        interpolates = self.rotated_imgs + (alpha * differences)
-        D_inter = self.discriminator.discriminate(interpolates, self.tags, reuse=True)
-        gradients = tf.gradients(D_inter, [interpolates])[0]
-        slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
-        gradient_penalty = tf.reduce_mean((slopes - 1.) ** 2)
+        rand_alpha = tf.random_uniform(shape=[self.batch_size, 1, 1, 1], 
+                                       minval=0, maxval=1, name="rand_alpha")
+        inter_imgs = self.real_imgs * rand_alpha + self.fake_imgs * (1-rand_alpha) 
+        inter_logits = self.discriminator.discriminate(inter_imgs, self.tags, reuse=True)
+        inter_grads = tf.gradients(inter_logits, inter_imgs)[0]
+        slops = tf.sqrt(tf.reduce_sum(tf.square(inter_grads), axis=[1,2,3]))
+        penalty = tf.reduce_mean(tf.square(slops - 1))
 
         self.d_loss_real = tf.reduce_mean(self.real_logits)
         self.d_loss_fake = tf.reduce_mean(self.fake_logits)
         self.d_loss_wtag = tf.reduce_mean(self.wtag_logits)
-        self.d_loss = (self.d_loss_fake + self.d_loss_wtag) * 0.5 - self.d_loss_real \
-                            + self.hparams.penalty_coef * gradient_penalty
+        self.d_loss = (self.d_loss_fake + self.d_loss_wtag) - self.d_loss_real + self.hparams.penalty_coef * penalty
+        # self.d_loss = self.d_loss_fake - self.d_loss_real + self.hparams.penalty_coef * penalty
         self.g_loss = -self.d_loss_fake
+
+        # self.d_loss_wtag = tf.reduce_mean(self.wtag_logits)
+#         self.d_loss = (self.d_loss_fake + self.d_loss_wtag) * 0.5 - self.d_loss_real \
+#                             + self.hparams.penalty_coef * gradient_penalty
+
 
 
     def _add_optim(self):
@@ -129,33 +141,33 @@ class BasicGAN:
         
         sess.run(tf.global_variables_initializer())
 
-        for batch_id, batch_data in image_helper.iter_images(imgs_dir=self.hparams.imgs_dir, 
-                                                             tags_file=self.hparams.tags_file,
-                                                             batch_size=self.batch_size, 
+        test_tags = image_helper.get_test_tags()
+        for batch_id, batch_data in image_helper.iter_images(batch_size=self.batch_size, 
                                                              epoches=self.epoches):
             num_epoch, num_batch = batch_id
             batch_images, batch_tags, batch_wtags = batch_data
             if (num_epoch == 0) and (num_batch < self.hparams.d_pretrain):
                 # pre-train discriminator
-                _, current_step, d_loss = sess.run(
-                    [self.d_optim, self.global_step, self.d_loss], 
+                _, current_step, d_loss, d_accuarcy = sess.run(
+                    [self.d_optim, self.global_step, self.d_loss, self.d_accuarcy], 
                     feed_dict={
                         self.rand_noises: np.random.normal(size=[self.batch_size, self.noise_dim]),
                         self.real_imgs: batch_images,
                         self.tags: self.batch_tags,
                         self.wrong_tags: batch_wtags})
                 if current_step == self.hparams.d_pretrain:
-                    tf.logging.info("==== pre-train ==== current_step:{}, d_loss:{}"\
-                                    .format(current_step, d_loss))
+                    tf.logging.info("==== pre-train ==== current_step:{}, d_loss:{}, d_accuarcy:{}"\
+                                    .format(current_step, d_loss, d_accuarcy))
             else:
                 # optimize discriminator
-                _, current_step, d_loss = sess.run(
-                    [self.d_optim, self.global_step, self.d_loss], 
+                _, current_step, d_loss, d_accuarcy = sess.run(
+                    [self.d_optim, self.global_step, self.d_loss, self.d_accuarcy], 
                     feed_dict={self.rand_noises: np.random.normal(size=[self.batch_size, self.noise_dim]),
                                self.real_imgs: batch_images,
                                self.tags: batch_tags,
                                self.wrong_tags: batch_wtags})
-
+                # import IPython
+                # IPython.embed()
                 # optimize generator
                 if current_step % self.hparams.d_schedule == 0:
                     _, g_loss = sess.run(
@@ -176,8 +188,8 @@ class BasicGAN:
                     summary_writer.add_summary(d_summary_str, current_step)
                     summary_writer.add_summary(g_summary_str, current_step)
 
-                    tf.logging.info("step:{}, d_loss:{}, g_loss:{}"\
-                                    .format(current_step, d_loss, g_loss))
+                    tf.logging.info("step:{}, d_loss:{}, g_loss:{}, d_accuarcy:{}"\
+                                    .format(current_step, d_loss, g_loss, d_accuarcy))
 
             if (num_epoch > 0) and (num_batch == 0):
                 # generate images per epoch
@@ -185,7 +197,7 @@ class BasicGAN:
                 fake_imgs = sess.run(
                     self.fake_imgs, 
                     feed_dict={self.rand_noises: np.random.normal(size=[self.batch_size, self.noise_dim]),
-                               self.tags: image_helper.get_test_tags()})
+                               self.tags: test_tags})
                 image_helper.save_imgs(fake_imgs, 
                                        img_name="{}/fake-{}".format(self.hparams.sample_dir, num_epoch))
                 # save model per epoch

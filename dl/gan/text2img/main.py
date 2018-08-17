@@ -6,14 +6,14 @@ tf.logging.set_verbosity(tf.logging.INFO)
 tf.app.flags.DEFINE_string("model", "GAN", "model: GAN | LSGAN | WGAN | WGAN-GP")
 tf.app.flags.DEFINE_string("mode", "train", "mode: train | infer")
 tf.app.flags.DEFINE_integer("noise_dim", 100, "noise dim: default 100")
-tf.app.flags.DEFINE_integer("tag_dim", 512, "tag dim")
+tf.app.flags.DEFINE_integer("tag_dim", 128, "tag dim")
 tf.app.flags.DEFINE_float("learning_rate", 0.0002, "learning rate: default 0.001")
 tf.app.flags.DEFINE_float("beta1", 0.5, "Adam beta1")
 tf.app.flags.DEFINE_integer("epoches", 1000, "epoches: default 100")
-tf.app.flags.DEFINE_integer("batch_size", 25, "batch_size: default 64")
+tf.app.flags.DEFINE_integer("batch_size", 64, "batch_size: default 64")
 
 tf.app.flags.DEFINE_integer("d_pretrain", 0, "discriminator pretrain")
-tf.app.flags.DEFINE_integer("d_schedule", 10, "train discriminator more ...")
+tf.app.flags.DEFINE_integer("d_schedule", 15, "train discriminator more ...")
 
 tf.app.flags.DEFINE_string("checkpoint_dir", "./checkpoint", 
                            "Directory name to save the checkpoints [checkpoint]")
