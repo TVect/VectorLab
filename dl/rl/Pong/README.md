@@ -17,6 +17,8 @@ pip install opencv-python gym
 pip install --no-index -f https://github.com/Kojoley/atari-py/releases atari_py
 ```
 
+gym ÎÄµµ²Î¼û http://gym.openai.com/docs/
+
 # How to run :
 training policy gradient:
 * `$ python main.py --train_pg`
