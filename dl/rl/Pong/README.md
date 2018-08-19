@@ -1,22 +1,31 @@
-# MLDS HW4
+使用 Policy Gradient 玩 atari Pong
+
 Please don't revise test.py, environment.py, agent_dir/agent.py
 
-## Installation
-Type the following command to install OpenAI Gym Atari environment.
+# 环境安装
 
-`$ pip3 install opencv-python gym gym[atari]`
+安装 OpenAI Gym Atari 环境
 
-Please refer to [OpenAI's page](https://github.com/openai/gym) if you have any problem while installing.
+- Linux 下安装
+```
+pip install opencv-python gym gym[atari]
+```
 
-## How to run :
+- windows 下安装
+```
+pip install opencv-python gym
+pip install --no-index -f https://github.com/Kojoley/atari-py/releases atari_py
+```
+
+# How to run :
 training policy gradient:
-* `$ python3 main.py --train_pg`
+* `$ python main.py --train_pg`
 
 testing policy gradient:
-* `$ python3 test.py --test_pg`
+* `$ python test.py --test_pg`
 
 training DQN:
-* `$ python3 main.py --train_dqn`
+* `$ python main.py --train_dqn`
 
 testing DQN:
-* `$ python3 test.py --test_dqn`
+* `$ python test.py --test_dqn`
