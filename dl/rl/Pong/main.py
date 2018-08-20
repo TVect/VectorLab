@@ -30,6 +30,7 @@ def run(args):
         env_name = args.env_name or 'Pong-v0'
         env = Environment(env_name, args)
         from agent_dir.agent_pg import Agent_PG
+        print("train....")
         agent = Agent_PG(env, args)
         agent.train()
 

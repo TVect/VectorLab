@@ -1,23 +1,24 @@
-Ê¹ÓÃ Policy Gradient Íæ atari Pong
+ï»¿ä½¿ç”¨ Policy Gradient ç© atari Pong
 
 Please don't revise test.py, environment.py, agent_dir/agent.py
 
-# »·¾³°²×°
+# ç¯å¢ƒå®‰è£…
 
-°²×° OpenAI Gym Atari »·¾³
+å®‰è£… OpenAI Gym Atari ç¯å¢ƒ
 
-- Linux ÏÂ°²×°
+- Linux ä¸‹å®‰è£…
 ```
-pip install opencv-python gym gym[atari]
+pip install opencv-python gym 
+pip install gym[atari]
 ```
 
-- windows ÏÂ°²×°
+- windows ä¸‹å®‰è£…
 ```
 pip install opencv-python gym
 pip install --no-index -f https://github.com/Kojoley/atari-py/releases atari_py
 ```
 
-gym ÎÄµµ²Î¼û http://gym.openai.com/docs/
+gym æ–‡æ¡£å‚è§ http://gym.openai.com/docs/
 
 # How to run :
 training policy gradient:
