@@ -3,15 +3,17 @@ from collections import deque
 import tensorflow as tf
 import numpy as np
 import random
+import os
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
 class DQN:
     
-    def __init__(self):
-        self.n_obs = [80, 80, 4]
-        self.n_actions = 3
-        self.gamma = 0.9    # discount factor
+    def __init__(self, hparams):
+        self.n_obs = hparams.n_obs
+        self.n_actions = hparams.n_actions
+        self.gamma = hparams.gamma    # discount factor
+        self.learning_rate = hparams.learning_rate
         self._build()
 
     def _build(self):
@@ -21,12 +23,11 @@ class DQN:
 
 
     def _add_placeholder(self):
-        self.states = tf.placeholder(dtype=tf.float32, shape=[None, 84, 84, 4], name="states")
-        # self.actions = tf.placeholder(dtype=tf.float32, shape=[None, self.n_actions], name="actions")
+        states_shape = [None] + self.n_obs
+        self.states = tf.placeholder(dtype=tf.float32, shape=states_shape, name="states")
+        self.actions = tf.placeholder(dtype=tf.int32, shape=[None], name="actions")
         self.rewards = tf.placeholder(dtype=tf.float32, shape=[None], name="rewards")
-        self.next_states = tf.placeholder(dtype=tf.float32, shape=[None, 84, 84, 4], name="next_states")
-        
-        self.q_targets = tf.placeholder(dtype=tf.float32, shape=[None, self.n_actions], name="q_target")
+        self.next_states = tf.placeholder(dtype=tf.float32, shape=states_shape, name="next_states")
 
 
     def _add_predictions(self):
@@ -35,19 +36,24 @@ class DQN:
         with tf.variable_scope("target_net"):
             self.output_target = self.predict_op(self.next_states, name="output_target")
 
+        self.q_targets = tf.stop_gradient(self.rewards + self.gamma * tf.reduce_max(self.output_target, axis=1),
+                                          name="q_targets")
+        a_indices = tf.stack([tf.range(tf.shape(self.actions)[0], dtype=tf.int32), self.actions], axis=1)
+        self.q_eval_wrt_a = tf.gather_nd(params=self.output_eval, indices=a_indices)    # shape=(None, )
+
         with tf.variable_scope("loss"):
-            self.loss = tf.reduce_mean(tf.reduce_sum(tf.square(self.output_eval - self.q_targets), axis=1))
-        
+            self.loss = tf.reduce_mean(tf.squared_difference(self.q_targets, self.q_eval_wrt_a),
+                                       name="loss")
+
         self.global_step = tf.Variable(0, trainable=False)
         with tf.variable_scope("optim"):
-            learning_rate = tf.train.exponential_decay(1e-3, 
-                                                       self.global_step, 
-                                                       decay_steps=1000,
-                                                       decay_rate=0.98,
-                                                       staircase=True)    
-            self.train_op = tf.train.GradientDescentOptimizer(learning_rate).\
+#             learning_rate = tf.train.exponential_decay(self.learning_rate, 
+#                                                        self.global_step, 
+#                                                        decay_steps=1000,
+#                                                        decay_rate=0.98,
+#                                                        staircase=True)
+            self.train_op = tf.train.GradientDescentOptimizer(self.learning_rate).\
                             minimize(self.loss, global_step=self.global_step)
-
 
         t_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, "target_net")
         e_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, 'eval_net')
@@ -82,7 +88,7 @@ class DQN:
 
 
     def _add_saver(self):
-        pass
+        self.saver = tf.train.Saver(tf.global_variables(), max_to_keep=10)
 
 
     def train(self, session, replay_buf, batch_size=32):
@@ -101,25 +107,28 @@ class DQN:
         rewards = np.array(rewards)     # shape: [batch_size]
         next_states = np.array(next_states)     # shape: [batch_size, 80, 80, 4]
         
-        # shape: [batch_size, n_actions]
-        out_eval, out_target = session.run([self.output_eval, self.output_target], 
-                                           feed_dict={self.states: states, 
-                                                      self.next_states: next_states})
-        q_targets = out_eval.copy()
-        q_targets[:, actions] = rewards + self.gamma * np.max(out_target, axis=1)
         _, _step = session.run([self.train_op, self.global_step], 
                                feed_dict={self.states: states, 
-                                          # self.actions: actions,
+                                          self.actions: actions,
                                           self.rewards: rewards,
-                                          self.q_targets: q_targets})
+                                          self.next_states: next_states})
 
+    def cp2targetnet(self, session):
         # 将当前网络参数复制到 target_net 中
-        if (_step > 100) and (_step % 100 == 0):
-            session.run(self.assign_ops)
+        # if (_step > 100) and (_step % 100 == 0):
+        tf.logging.info("...... copy parameters ......")
+        session.run(self.assign_ops)
 
 
     def predict(self, session, states):
         return session.run(self.output_eval, feed_dict={self.states: states})
+
+
+    def save(self, sess, checkpoint_prefix):
+        checkpoint_dir = os.path.dirname(checkpoint_prefix)
+        if not os.path.exists(checkpoint_dir):
+            os.makedirs(checkpoint_dir)
+        self.saver.save(sess, checkpoint_prefix, global_step=self.global_step)
 
 
     def load(self, sess, checkpoint_dir):
@@ -141,16 +150,29 @@ class Agent_DQN(Agent):
 
         super(Agent_DQN,self).__init__(env)
 
-        self.n_actions = self.env.action_space.n
-        self.dqn = DQN()
+        self.hparams = tf.contrib.training.HParams(
+            n_actions = self.env.action_space.n,
+            total_episode = 100000,
+            epsilon = 1.0,
+            epsilon_min = 0.025,
+            n_obs = list(self.env.env.observation_space.shape),
+            gamma = 0.95,    # discount factor
+            learning_rate = 0.00015,
+            use_dueling=False,
+            checkpoint_path="./runs/checkpoints/dqn",
+            history_rewards_file="./history_rewards.npy"
+            )
+
+        self.epsilon = self.hparams.epsilon_min
+        self.epsilon_min = self.hparams.epsilon_min
+        self.epsilon_decay = (self.hparams.epsilon - self.hparams.epsilon_min)/100000,
+
+        self.dqn = DQN(self.hparams)
+        self.session = tf.Session()
         if args.test_dqn:
-            #you can load your model here
-            print('loading trained model')
-
-        ##################
-        # YOUR CODE HERE #
-        ##################
-
+            tf.logging.info('loading trained model')
+        self.dqn.load(self.session, self.hparams.checkpoint_path)
+            
 
     def init_game_setting(self):
         """
@@ -159,11 +181,9 @@ class Agent_DQN(Agent):
         Put anything you want to initialize if necessary
 
         """
-        ##################
-        # YOUR CODE HERE #
-        ##################
-        self.session = tf.Session()
-        self.dqn.load(self.session, "./runs/checkpoints")
+        self.i_step = -1
+        self.history_rewards = []
+        self.replay_buf = deque(maxlen=10000)
 
 
     def train(self):
@@ -172,35 +192,41 @@ class Agent_DQN(Agent):
         """
         tf.logging.info("...... start training ......")
         self.init_game_setting()
-        i_episode = -1
-        running_reward = None
-        
-        replay_buf = deque(maxlen=1000)
 
-        while True:
-            i_episode += 1
+        running_reward = None
+        for i_episode in range(self.hparams.total_episode):
             state = self.env.reset()
             done = False
             
             cumulate_reward = 0
-            #playing one game
+            # playing one game
             while(not done):
+                self.i_step += 1
                 # self.env.env.render()
                 action = self.make_action(state, test=False)
                 next_state, reward, done, info = self.env.step(action)
-                replay_buf.append([state, action, reward, next_state])
+                self.replay_buf.append([state, action, reward, next_state])
                 state = next_state
                 cumulate_reward += reward
             
-            if i_episode > 10:
-                self.dqn.train(self.session, replay_buf)
-            # self.model.train(self.sess, episode_states, episode_actions, discount_rewards)
+                if (i_episode > 10) and (self.i_step % 4 == 0):
+                    self.dqn.train(self.session, self.replay_buf)
+                if self.i_step % 1000 == 0:
+                    self.dqn.cp2targetnet(self.session)
 
-            running_reward = cumulate_reward if running_reward is None else running_reward * 0.99 + cumulate_reward * 0.01            
+            running_reward = cumulate_reward if running_reward is None \
+                            else running_reward * 0.99 + cumulate_reward * 0.01          
+            self.history_rewards.append(running_reward)
             if i_episode % 10 == 0:
                 tf.logging.info('ep {}: reward: {}, mean reward: {:3f}'.format(i_episode, cumulate_reward, running_reward))
             else:
                 tf.logging.info('\tep {}: reward: {}'.format(i_episode, cumulate_reward))
+
+            if i_episode % 2000 == 0:
+                self.dqn.save(self.session, self.hparams.checkpoint_path)
+            
+        # 记录训练历史.
+        np.save(self.hparams.history_rewards_file, history_rewards)
 
 
     def make_action(self, observation, test=True):
@@ -215,10 +241,16 @@ class Agent_DQN(Agent):
             action: int
                 the predicted action from trained model
         """
-        ##################
-        # YOUR CODE HERE #
-        ##################
-        output = self.dqn.predict(self.session, [observation])
-        return np.argmax(output[0])
-        return self.env.get_random_action()
+        # epsilon 逐渐减小
+        if self.epsilon > self.epsilon_min:
+            self.epsilon -= self.epsilon_decay
 
+        if test:
+            output = self.dqn.predict(self.session, [observation])
+            return np.argmax(output[0])
+        else:
+            # epsilon-greedy
+            if random.random() < self.epsilon:
+                return random.randrange(self.hparams.n_actions)
+            output = self.dqn.predict(self.session, [observation])
+            return np.argmax(output[0])
