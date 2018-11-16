@@ -61,52 +61,31 @@ class DQN:
         self.assign_ops = [tf.assign(target_w, eval_w) for target_w, eval_w in zip(t_params, e_params)]
 
 
-    def predict_op(self, input):
-        with tf.variable_scope("conv-1"):
-            filter1 = tf.get_variable(name="filter1", shape=[8, 8, 4, 32], 
-                                      initializer=tf.contrib.layers.xavier_initializer())
-            out_conv1 = tf.nn.conv2d(input=input, filter=filter1, 
-                                     strides=[1, 4, 4, 1], padding="SAME")
+    def predict_op(self, inputs):
+        out_conv1 = tf.layers.conv2d(inputs=inputs, filters=32, kernel_size=[8, 8], strides=[4, 4], 
+            padding='valid', activation=tf.nn.relu, kernel_initializer=tf.contrib.layers.xavier_initializer())
 
-        with tf.variable_scope("conv-2"):
-            filter2 = tf.get_variable(name="filter2", shape=[4, 4, 32, 64], 
-                                      initializer=tf.contrib.layers.xavier_initializer())
-            out_conv2 = tf.nn.conv2d(input=out_conv1, filter=filter2, 
-                                     strides=[1, 2, 2, 1], padding="SAME")
+        out_conv2 = tf.layers.conv2d(inputs=out_conv1, filters=64, kernel_size=[4, 4], strides=[2, 2], 
+            padding='valid', activation=tf.nn.relu, kernel_initializer=tf.contrib.layers.xavier_initializer())
 
-        with tf.variable_scope("conv-3"):
-            filter3 = tf.get_variable(name="filter3", shape=[3, 3, 64, 64], 
-                                      initializer=tf.contrib.layers.xavier_initializer())
-            out_conv3 = tf.nn.conv2d(input=out_conv2, filter=filter3, 
-                                     strides=[1, 1, 1, 1], padding="SAME")
+        out_conv3 = tf.layers.conv2d(inputs=out_conv2, filters=64, kernel_size=[3, 3], strides=[1, 1], 
+            padding='valid', activation=tf.nn.relu, kernel_initializer=tf.contrib.layers.xavier_initializer())
+        
+        flatten_vec = tf.layers.flatten(out_conv3, name="flatten_vec")
+        
+        out1 = tf.layers.dense(inputs=flatten_vec, units=512, activation=tf.nn.leaky_relu, 
+                               kernel_initializer=tf.contrib.layers.xavier_initializer())
 
-        with tf.variable_scope("out-layer"):
-            flatten_vec = tf.layers.flatten(out_conv3, name="flatten_vec")
-            weights1 = tf.get_variable(name="weights1", shape=[flatten_vec.shape[-1], 512], 
-                                      initializer=tf.contrib.layers.xavier_initializer())
-            bias1 = tf.get_variable(name="bias1", shape=[512], initializer=tf.zeros_initializer())
-            output1 = tf.nn.leaky_relu(tf.add(tf.matmul(flatten_vec, weights1), bias1))
+        output = tf.layers.dense(inputs=out1, units=self.n_actions,
+                                 kernel_initializer=tf.contrib.layers.xavier_initializer())
 
-            weights2 = tf.get_variable(name="weights2", shape=[512, self.n_actions], 
-                                      initializer=tf.contrib.layers.xavier_initializer())
-            bias2 = tf.get_variable(name="bias2", shape=[self.n_actions], initializer=tf.zeros_initializer())
-            
-            output = tf.add(tf.matmul(output1, weights2), bias2)
-
-            if self.use_dueling:
-                weights1_state = tf.get_variable(name="weights1_state", shape=[flatten_vec.shape[-1], 512], 
-                                                   initializer=tf.contrib.layers.xavier_initializer())
-                bias1_state = tf.get_variable(name="bias1_state", shape=[512], initializer=tf.zeros_initializer())
-                output1_state = tf.nn.leaky_relu(tf.add(tf.matmul(flatten_vec, weights1), bias1))
-
-                weights2_state = tf.get_variable(name="weights2_state", shape=[512, 1], 
-                                                   initializer=tf.contrib.layers.xavier_initializer())
-                bias2_state = tf.get_variable(name="bias2_state", shape=[1], initializer=tf.zeros_initializer())
-                output_state = tf.add(tf.matmul(output1, weights2), bias2)
-                
-                output_action = output - tf.reduce_mean(output, axis=1, keepdims=True)
-                
-                output = tf.add(output_action, output_state)
+        if self.use_dueling:
+            out1_state = tf.layers.dense(inputs=flatten_vec, units=512, activation=tf.nn.leaky_relu, 
+                                        kernel_initializer=tf.contrib.layers.xavier_initializer())
+            out_state = tf.layers.dense(inputs=out1_state, units=1, 
+                                        kernel_initializer=tf.contrib.layers.xavier_initializer())
+            output_action = output - tf.reduce_mean(output, axis=1, keepdims=True)
+            output = tf.add(output_action, output_state)
 
         return output
 
