@@ -87,7 +87,7 @@ class DQN:
             out_state = tf.layers.dense(inputs=out1_state, units=1, 
                                         kernel_initializer=tf.contrib.layers.xavier_initializer())
             output_action = output - tf.reduce_mean(output, axis=1, keepdims=True)
-            output = tf.add(output_action, output_state)
+            output = tf.add(output_action, out_state)
 
         return output
 
