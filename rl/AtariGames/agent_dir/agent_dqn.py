@@ -14,6 +14,7 @@ class DQN:
         self.n_actions = hparams.n_actions
         self.gamma = hparams.gamma    # discount factor
         self.learning_rate = hparams.learning_rate
+        self.use_dueling = hparams.use_dueling
         self._build()
 
     def _build(self):
@@ -32,9 +33,9 @@ class DQN:
 
     def _add_predictions(self):
         with tf.variable_scope("eval_net"):
-            self.output_eval = self.predict_op(self.states, name="output_eval")
+            self.output_eval = self.predict_op(self.states)
         with tf.variable_scope("target_net"):
-            self.output_target = self.predict_op(self.next_states, name="output_target")
+            self.output_target = self.predict_op(self.next_states)
 
         self.q_targets = tf.stop_gradient(self.rewards + self.gamma * tf.reduce_max(self.output_target, axis=1),
                                           name="q_targets")
@@ -60,29 +61,52 @@ class DQN:
         self.assign_ops = [tf.assign(target_w, eval_w) for target_w, eval_w in zip(t_params, e_params)]
 
 
-    def predict_op(self, input, name):
+    def predict_op(self, input):
         with tf.variable_scope("conv-1"):
-            filter1 = tf.get_variable(name="filter1", shape=[3, 3, 4, 64], 
+            filter1 = tf.get_variable(name="filter1", shape=[8, 8, 4, 32], 
                                       initializer=tf.contrib.layers.xavier_initializer())
             out_conv1 = tf.nn.conv2d(input=input, filter=filter1, 
-                                     strides=[1, 2, 2, 1], padding="SAME")
-            out_pool1 = tf.nn.max_pool(value=out_conv1, ksize=[1, 2, 2, 1], 
-                                       strides=[1, 2, 2, 1], padding="SAME")
+                                     strides=[1, 4, 4, 1], padding="SAME")
 
         with tf.variable_scope("conv-2"):
-            filter2 = tf.get_variable(name="filter2", shape=[3, 3, 64, 64], 
+            filter2 = tf.get_variable(name="filter2", shape=[4, 4, 32, 64], 
                                       initializer=tf.contrib.layers.xavier_initializer())
-            out_conv2 = tf.nn.conv2d(input=out_pool1, filter=filter2, 
+            out_conv2 = tf.nn.conv2d(input=out_conv1, filter=filter2, 
                                      strides=[1, 2, 2, 1], padding="SAME")
-            out_pool2 = tf.nn.max_pool(value=out_conv2, ksize=[1, 2, 2, 1], 
-                                       strides=[1, 2, 2, 1], padding="SAME")
+
+        with tf.variable_scope("conv-3"):
+            filter3 = tf.get_variable(name="filter3", shape=[3, 3, 64, 64], 
+                                      initializer=tf.contrib.layers.xavier_initializer())
+            out_conv3 = tf.nn.conv2d(input=out_conv2, filter=filter3, 
+                                     strides=[1, 1, 1, 1], padding="SAME")
 
         with tf.variable_scope("out-layer"):
-            flatten_vec = tf.layers.flatten(out_pool2, name="flatten_vec")
-            weights = tf.get_variable(name="weights", shape=[flatten_vec.shape[-1], self.n_actions], 
+            flatten_vec = tf.layers.flatten(out_conv3, name="flatten_vec")
+            weights1 = tf.get_variable(name="weights1", shape=[flatten_vec.shape[-1], 512], 
                                       initializer=tf.contrib.layers.xavier_initializer())
-            bias = tf.get_variable(name="bias", shape=[self.n_actions], initializer=tf.zeros_initializer())
-            output = tf.add(tf.matmul(flatten_vec, weights), bias, name=name)
+            bias1 = tf.get_variable(name="bias1", shape=[512], initializer=tf.zeros_initializer())
+            output1 = tf.nn.leaky_relu(tf.add(tf.matmul(flatten_vec, weights1), bias1))
+
+            weights2 = tf.get_variable(name="weights2", shape=[512, self.n_actions], 
+                                      initializer=tf.contrib.layers.xavier_initializer())
+            bias2 = tf.get_variable(name="bias2", shape=[self.n_actions], initializer=tf.zeros_initializer())
+            
+            output = tf.add(tf.matmul(output1, weights2), bias2)
+
+            if self.use_dueling:
+                weights1_state = tf.get_variable(name="weights1_state", shape=[flatten_vec.shape[-1], 512], 
+                                                   initializer=tf.contrib.layers.xavier_initializer())
+                bias1_state = tf.get_variable(name="bias1_state", shape=[512], initializer=tf.zeros_initializer())
+                output1_state = tf.nn.leaky_relu(tf.add(tf.matmul(flatten_vec, weights1), bias1))
+
+                weights2_state = tf.get_variable(name="weights2_state", shape=[512, 1], 
+                                                   initializer=tf.contrib.layers.xavier_initializer())
+                bias2_state = tf.get_variable(name="bias2_state", shape=[1], initializer=tf.zeros_initializer())
+                output_state = tf.add(tf.matmul(output1, weights2), bias2)
+                
+                output_action = output - tf.reduce_mean(output, axis=1, keepdims=True)
+                
+                output = tf.add(output_action, output_state)
 
         return output
 
@@ -153,26 +177,31 @@ class Agent_DQN(Agent):
         self.hparams = tf.contrib.training.HParams(
             n_actions = self.env.action_space.n,
             total_episode = 100000,
-            epsilon = 1.0,
+            init_episode = 100,
+            exploration_episode = 20000, 
+            epsilon_init = 1.0,
             epsilon_min = 0.025,
             n_obs = list(self.env.env.observation_space.shape),
             gamma = 0.95,    # discount factor
             learning_rate = 0.00015,
-            use_dueling=False,
-            checkpoint_path="./runs/checkpoints/dqn",
-            history_rewards_file="./history_rewards.npy"
+            use_dueling = False,
+            checkpoint_path = "./runs/checkpoints/dqn",
+            history_rewards_file = "./history_rewards.npy",
+            save_interval = 2000,
+            target_update_interval = 1000,
+            train_interval = 4,
+            replay_size = 10000,
             )
 
-        self.epsilon = self.hparams.epsilon_min
-        self.epsilon_min = self.hparams.epsilon_min
-        self.epsilon_decay = (self.hparams.epsilon - self.hparams.epsilon_min)/100000,
+        self.epsilon = self.hparams.epsilon_init
+        self.epsilon_decay = (self.hparams.epsilon_init - self.hparams.epsilon_min)/self.hparams.exploration_episode
 
         self.dqn = DQN(self.hparams)
         self.session = tf.Session()
         if args.test_dqn:
             tf.logging.info('loading trained model')
         self.dqn.load(self.session, self.hparams.checkpoint_path)
-            
+
 
     def init_game_setting(self):
         """
@@ -181,9 +210,9 @@ class Agent_DQN(Agent):
         Put anything you want to initialize if necessary
 
         """
-        self.i_step = -1
+        self.i_episode = -1
         self.history_rewards = []
-        self.replay_buf = deque(maxlen=10000)
+        self.replay_buf = deque(maxlen=self.hparams.replay_size)
 
 
     def train(self):
@@ -194,14 +223,18 @@ class Agent_DQN(Agent):
         self.init_game_setting()
 
         running_reward = None
-        for i_episode in range(self.hparams.total_episode):
+        i_step = 0
+        while self.i_episode < self.hparams.total_episode:
             state = self.env.reset()
             done = False
             
+            self.i_episode += 1
             cumulate_reward = 0
+            episode_steps = 0
             # playing one game
             while(not done):
-                self.i_step += 1
+                i_step += 1
+                episode_steps += 1
                 # self.env.env.render()
                 action = self.make_action(state, test=False)
                 next_state, reward, done, info = self.env.step(action)
@@ -209,24 +242,26 @@ class Agent_DQN(Agent):
                 state = next_state
                 cumulate_reward += reward
             
-                if (i_episode > 10) and (self.i_step % 4 == 0):
+                if (self.i_episode >= self.hparams.init_episode) \
+                        and (i_step % self.hparams.train_interval == 0):
                     self.dqn.train(self.session, self.replay_buf)
-                if self.i_step % 1000 == 0:
+                if i_step % self.hparams.target_update_interval == 0:
                     self.dqn.cp2targetnet(self.session)
 
             running_reward = cumulate_reward if running_reward is None \
                             else running_reward * 0.99 + cumulate_reward * 0.01          
             self.history_rewards.append(running_reward)
-            if i_episode % 10 == 0:
-                tf.logging.info('ep {}: reward: {}, mean reward: {:3f}'.format(i_episode, cumulate_reward, running_reward))
-            else:
-                tf.logging.info('\tep {}: reward: {}'.format(i_episode, cumulate_reward))
 
-            if i_episode % 2000 == 0:
+            tf.logging.info('I_EPISODE: {:06d} | EPISODE_STEPS: {:03d} | I_STEP: {:09d} | '
+                            'EPSILON: {:.5f} | CUR_REWARD: {:2.3f} | AVG_REWARD: {:2.3f}'.format(
+                            self.i_episode, episode_steps, i_step, 
+                            self.epsilon, cumulate_reward, running_reward))
+
+            if self.i_episode % self.hparams.save_interval == 0:
                 self.dqn.save(self.session, self.hparams.checkpoint_path)
-            
+
         # 记录训练历史.
-        np.save(self.hparams.history_rewards_file, history_rewards)
+        np.save(self.hparams.history_rewards_file, self.history_rewards)
 
 
     def make_action(self, observation, test=True):
@@ -242,8 +277,8 @@ class Agent_DQN(Agent):
                 the predicted action from trained model
         """
         # epsilon 逐渐减小
-        if self.epsilon > self.epsilon_min:
-            self.epsilon -= self.epsilon_decay
+        if self.epsilon > self.hparams.epsilon_min:
+            self.epsilon = self.hparams.epsilon_init - self.i_episode * self.epsilon_decay
 
         if test:
             output = self.dqn.predict(self.session, [observation])
