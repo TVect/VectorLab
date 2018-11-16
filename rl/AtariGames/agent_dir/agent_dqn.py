@@ -29,6 +29,7 @@ class DQN:
         self.actions = tf.placeholder(dtype=tf.int32, shape=[None], name="actions")
         self.rewards = tf.placeholder(dtype=tf.float32, shape=[None], name="rewards")
         self.next_states = tf.placeholder(dtype=tf.float32, shape=states_shape, name="next_states")
+        self.dones = tf.placeholder(dtype=tf.int32, shape=[None], name="dones")
 
 
     def _add_predictions(self):
@@ -37,7 +38,8 @@ class DQN:
         with tf.variable_scope("target_net"):
             self.output_target = self.predict_op(self.next_states)
 
-        self.q_targets = tf.stop_gradient(self.rewards + self.gamma * tf.reduce_max(self.output_target, axis=1),
+        self.q_targets = tf.stop_gradient(self.rewards + self.gamma * tf.reduce_max(self.output_target, axis=1)\
+                                           * tf.cast(1-self.dones, tf.float32),
                                           name="q_targets")
         a_indices = tf.stack([tf.range(tf.shape(self.actions)[0], dtype=tf.int32), self.actions], axis=1)
         self.q_eval_wrt_a = tf.gather_nd(params=self.output_eval, indices=a_indices)    # shape=(None, )
@@ -100,11 +102,13 @@ class DQN:
         actions = []
         rewards = []
         next_states = []
+        dones = []
         for sample in mini_batch:
             states.append(sample[0])
             actions.append(sample[1])
             rewards.append(sample[2])
             next_states.append(sample[3])
+            dones.append(sample[4])
         states = np.array(states)       # shape: [batch_size, 80, 80, 4]
         actions = np.array(actions)     # shape: [batch_size]
         rewards = np.array(rewards)     # shape: [batch_size]
@@ -114,7 +118,8 @@ class DQN:
                                feed_dict={self.states: states, 
                                           self.actions: actions,
                                           self.rewards: rewards,
-                                          self.next_states: next_states})
+                                          self.next_states: next_states,
+                                          self.dones: dones})
 
     def cp2targetnet(self, session):
         # 将当前网络参数复制到 target_net 中
@@ -217,7 +222,7 @@ class Agent_DQN(Agent):
                 # self.env.env.render()
                 action = self.make_action(state, test=False)
                 next_state, reward, done, info = self.env.step(action)
-                self.replay_buf.append([state, action, reward, next_state])
+                self.replay_buf.append([state, action, reward, next_state, int(done)])
                 state = next_state
                 cumulate_reward += reward
             
