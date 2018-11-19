@@ -98,14 +98,19 @@ class DQN:
         self.target_output = self.target_net(self.next_states)
 
         if self.use_ddqn:
-            target_argmax = tf.argmax(self.target_output, axis=1)
-            target_argmax_indices = tf.stack([tf.range(tf.shape(self.actions)[0], dtype=tf.int32), self.actions],
-                                             axis=1)
+            # 用 eval_net 选取最大的 action, 用 target_net 评估 action 对应的 value 值.
             eval_nextstates = self.eval_net(self.next_states)
-            self.q_targets = tf.gather_nd(params=eval_nextstates, indices=target_argmax_indices)
-        else:
+            eval_argmax = tf.argmax(eval_nextstates, axis=1, output_type=tf.int32)
+            eval_argmax_indices = tf.stack([tf.range(tf.shape(self.actions)[0], dtype=tf.int32), eval_argmax],
+                                           axis=1)
+            target_vals = tf.gather_nd(params=self.target_output, indices=eval_argmax_indices)
             self.q_targets = tf.stop_gradient(
-                self.rewards+self.gamma*tf.reduce_max(self.target_output, axis=1)*tf.cast(1-self.dones, tf.float32), 
+                self.rewards + self.gamma * target_vals * tf.cast(1-self.dones, tf.float32),
+                name="q_targets")
+        else:
+            target_vals = tf.reduce_max(self.target_output, axis=1)
+            self.q_targets = tf.stop_gradient(
+                self.rewards + self.gamma * target_vals * tf.cast(1-self.dones, tf.float32), 
                 name="q_targets")
 
         a_indices = tf.stack([tf.range(tf.shape(self.actions)[0], dtype=tf.int32), self.actions], axis=1)
@@ -196,25 +201,25 @@ class Agent_DQN(Agent):
         self.hparams = tf.contrib.training.HParams(
             n_actions = self.env.action_space.n,
             total_episode = 100000,
-            init_episode = 100,
-            exploration_episode = 20000, 
+            init_step = 10000,
+            exploration_step = 1000000, 
             epsilon_init = 1.0,
             epsilon_min = 0.025,
             n_obs = list(self.env.env.observation_space.shape),
-            gamma = 0.95,    # discount factor
+            gamma = 0.99,    # discount factor
             learning_rate = 0.00015,
             use_dueling = False,
-            use_ddqn = True,
-            checkpoint_path = "./runs/checkpoints/dqn",
+            use_ddqn = False,
+            checkpoint_path = "./checkpoints/agent_dqn/dqn",
             history_rewards_file = "./history_rewards.npy",
-            save_interval = 2000,
+            save_interval = 100000,
             target_update_interval = 1000,
             train_interval = 4,
             replay_size = 10000,
             )
 
         self.epsilon = self.hparams.epsilon_init
-        self.epsilon_decay = (self.hparams.epsilon_init - self.hparams.epsilon_min)/self.hparams.exploration_episode
+        self.epsilon_decay = (self.hparams.epsilon_init - self.hparams.epsilon_min)/self.hparams.exploration_step
 
         self.dqn = DQN(self.hparams)
         self.session = tf.Session()
@@ -230,7 +235,7 @@ class Agent_DQN(Agent):
         Put anything you want to initialize if necessary
 
         """
-        self.i_episode = -1
+        self.i_step = -1
         self.history_rewards = []
         self.replay_buf = deque(maxlen=self.hparams.replay_size)
 
@@ -243,17 +248,15 @@ class Agent_DQN(Agent):
         self.init_game_setting()
 
         running_reward = None
-        i_step = 0
-        while self.i_episode < self.hparams.total_episode:
+        for i_episode in range(self.hparams.total_episode):
             state = self.env.reset()
             done = False
-            
-            self.i_episode += 1
+
             cumulate_reward = 0
             episode_steps = 0
             # playing one game
             while(not done):
-                i_step += 1
+                self.i_step += 1
                 episode_steps += 1
                 # self.env.env.render()
                 action = self.make_action(state, test=False)
@@ -262,10 +265,11 @@ class Agent_DQN(Agent):
                 state = next_state
                 cumulate_reward += reward
             
-                if (self.i_episode >= self.hparams.init_episode) \
-                        and (i_step % self.hparams.train_interval == 0):
+                if (self.i_step >= self.hparams.init_step) \
+                        and (self.i_step % self.hparams.train_interval == 0):
                     self.dqn.train(self.session, self.replay_buf)
-                if i_step % self.hparams.target_update_interval == 0:
+                if (self.i_step >= self.hparams.init_step) \
+                        and (self.i_step % self.hparams.target_update_interval == 0):
                     self.dqn.cp2targetnet(self.session)
 
             running_reward = cumulate_reward if running_reward is None \
@@ -274,10 +278,10 @@ class Agent_DQN(Agent):
 
             tf.logging.info('I_EPISODE: {:06d} | EPISODE_STEPS: {:03d} | I_STEP: {:09d} | '
                             'EPSILON: {:.5f} | CUR_REWARD: {:2.3f} | AVG_REWARD: {:2.3f}'.format(
-                            self.i_episode, episode_steps, i_step, 
+                            i_episode, episode_steps, self.i_step, 
                             self.epsilon, cumulate_reward, running_reward))
 
-            if self.i_episode % self.hparams.save_interval == 0:
+            if self.i_step % self.hparams.save_interval == 0:
                 self.dqn.save(self.session, self.hparams.checkpoint_path)
 
         # 记录训练历史.
@@ -298,7 +302,7 @@ class Agent_DQN(Agent):
         """
         # epsilon 逐渐减小
         if self.epsilon > self.hparams.epsilon_min:
-            self.epsilon = self.hparams.epsilon_init - self.i_episode * self.epsilon_decay
+            self.epsilon = self.epsilon - self.epsilon_decay
 
         if test:
             output = self.dqn.predict(self.session, [observation])
