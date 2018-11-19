@@ -55,7 +55,7 @@ class DQN:
 #                                                        decay_steps=1000,
 #                                                        decay_rate=0.98,
 #                                                        staircase=True)
-            self.train_op = tf.train.GradientDescentOptimizer(self.learning_rate).\
+            self.train_op = tf.train.AdamOptimizer(self.learning_rate).\
                             minimize(self.loss, global_step=self.global_step)
 
         t_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, "target_net")
@@ -93,7 +93,9 @@ class DQN:
 
 
     def _add_saver(self):
-        self.saver = tf.train.Saver(tf.global_variables(), max_to_keep=10)
+        # self.saver = tf.train.Saver(tf.global_variables(), max_to_keep=10)
+        self.saver = tf.train.Saver(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, 'eval_net'), 
+                                    max_to_keep=10)
 
 
     def train(self, session, replay_buf, batch_size=32):
