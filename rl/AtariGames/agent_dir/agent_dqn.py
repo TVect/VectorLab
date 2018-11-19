@@ -7,14 +7,72 @@ import os
 
 tf.logging.set_verbosity(tf.logging.INFO)
 
-class DQN:
+
+class QNetwork:
     
-    def __init__(self, hparams):
+    def __init__(self, hparams, name):
+        self.name = name
+        
         self.n_obs = hparams.n_obs
         self.n_actions = hparams.n_actions
         self.gamma = hparams.gamma    # discount factor
         self.learning_rate = hparams.learning_rate
         self.use_dueling = hparams.use_dueling
+        
+        self.init_layers()
+    
+    
+    def init_layers(self):
+        self.conv_layer1 = tf.layers.Conv2D(filters=32, kernel_size=[8, 8], strides=[4, 4], padding='valid', 
+                        activation=tf.nn.relu, kernel_initializer=tf.contrib.layers.xavier_initializer())
+
+        self.conv_layer2 = tf.layers.Conv2D(filters=64, kernel_size=[4, 4], strides=[2, 2], padding='valid', 
+                        activation=tf.nn.relu, kernel_initializer=tf.contrib.layers.xavier_initializer())
+
+        self.conv_layer3 = tf.layers.Conv2D(filters=64, kernel_size=[3, 3], strides=[1, 1], padding='valid', 
+                        activation=tf.nn.relu, kernel_initializer=tf.contrib.layers.xavier_initializer())
+
+        self.flatten_layer = tf.layers.Flatten()
+        
+        self.action_dense_layer = tf.layers.Dense(units=512, activation=tf.nn.leaky_relu, 
+                                            kernel_initializer=tf.contrib.layers.xavier_initializer())
+        self.action_out_layer = tf.layers.Dense(units=self.n_actions, 
+                                        kernel_initializer=tf.contrib.layers.xavier_initializer())
+
+        if self.use_dueling:
+            self.state_dense_layer = tf.layers.Dense(units=512, activation=tf.nn.leaky_relu, 
+                                        kernel_initializer=tf.contrib.layers.xavier_initializer())
+            self.state_out_layer = tf.layers.Dense(units=1, 
+                                        kernel_initializer=tf.contrib.layers.xavier_initializer())
+
+    
+    def __call__(self, inputs):
+        with tf.variable_scope(self.name):
+            conv1 = self.conv_layer1.apply(inputs)
+            conv2 = self.conv_layer2.apply(conv1)
+            conv3 = self.conv_layer3.apply(conv2)
+            flatten_vec = self.flatten_layer.apply(conv3)
+            action_dense = self.action_dense_layer.apply(flatten_vec)
+            action_out = self.action_out_layer.apply(action_dense)
+            
+            if self.use_dueling:
+                state_dense = self.state_dense_layer.apply(flatten_vec)
+                state_out = self.state_out_layer.apply(state_dense)
+                return state_out + action_out - tf.reduce_mean(action_out, axis=1, keepdims=True)
+    
+            return action_out
+
+
+class DQN:
+    
+    def __init__(self, hparams):
+        self.hparams = hparams
+        self.n_obs = hparams.n_obs
+        self.n_actions = hparams.n_actions
+        self.gamma = hparams.gamma    # discount factor
+        self.learning_rate = hparams.learning_rate
+        self.use_dueling = hparams.use_dueling
+        self.use_ddqn = hparams.use_ddqn
         self._build()
 
     def _build(self):
@@ -33,16 +91,25 @@ class DQN:
 
 
     def _add_predictions(self):
-        with tf.variable_scope("eval_net"):
-            self.output_eval = self.predict_op(self.states)
-        with tf.variable_scope("target_net"):
-            self.output_target = self.predict_op(self.next_states)
+        self.eval_net = QNetwork(self.hparams, name="eval_net")
+        self.target_net = QNetwork(self.hparams, name="target_net")
 
-        self.q_targets = tf.stop_gradient(self.rewards + self.gamma * tf.reduce_max(self.output_target, axis=1)\
-                                           * tf.cast(1-self.dones, tf.float32),
-                                          name="q_targets")
+        self.eval_output = self.eval_net(self.states)
+        self.target_output = self.target_net(self.next_states)
+
+        if self.use_ddqn:
+            target_argmax = tf.argmax(self.target_output, axis=1)
+            target_argmax_indices = tf.stack([tf.range(tf.shape(self.actions)[0], dtype=tf.int32), self.actions],
+                                             axis=1)
+            eval_nextstates = self.eval_net(self.next_states)
+            self.q_targets = tf.gather_nd(params=eval_nextstates, indices=target_argmax_indices)
+        else:
+            self.q_targets = tf.stop_gradient(
+                self.rewards+self.gamma*tf.reduce_max(self.target_output, axis=1)*tf.cast(1-self.dones, tf.float32), 
+                name="q_targets")
+
         a_indices = tf.stack([tf.range(tf.shape(self.actions)[0], dtype=tf.int32), self.actions], axis=1)
-        self.q_eval_wrt_a = tf.gather_nd(params=self.output_eval, indices=a_indices)    # shape=(None, )
+        self.q_eval_wrt_a = tf.gather_nd(params=self.eval_output, indices=a_indices)    # shape=(None, )
 
         with tf.variable_scope("loss"):
             self.loss = tf.reduce_mean(tf.squared_difference(self.q_targets, self.q_eval_wrt_a),
@@ -50,47 +117,13 @@ class DQN:
 
         self.global_step = tf.Variable(0, trainable=False)
         with tf.variable_scope("optim"):
-#             learning_rate = tf.train.exponential_decay(self.learning_rate, 
-#                                                        self.global_step, 
-#                                                        decay_steps=1000,
-#                                                        decay_rate=0.98,
-#                                                        staircase=True)
+#             learning_rate = tf.train.exponential_decay(self.learning_rate, self.global_step, decay_steps=1000, decay_rate=0.98)
             self.train_op = tf.train.AdamOptimizer(self.learning_rate).\
                             minimize(self.loss, global_step=self.global_step)
 
         t_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, "target_net")
         e_params = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, 'eval_net')
         self.assign_ops = [tf.assign(target_w, eval_w) for target_w, eval_w in zip(t_params, e_params)]
-
-
-    def predict_op(self, inputs):
-        out_conv1 = tf.layers.conv2d(inputs=inputs, filters=32, kernel_size=[8, 8], strides=[4, 4], 
-            padding='valid', activation=tf.nn.relu, kernel_initializer=tf.contrib.layers.xavier_initializer())
-
-        out_conv2 = tf.layers.conv2d(inputs=out_conv1, filters=64, kernel_size=[4, 4], strides=[2, 2], 
-            padding='valid', activation=tf.nn.relu, kernel_initializer=tf.contrib.layers.xavier_initializer())
-
-        out_conv3 = tf.layers.conv2d(inputs=out_conv2, filters=64, kernel_size=[3, 3], strides=[1, 1], 
-            padding='valid', activation=tf.nn.relu, kernel_initializer=tf.contrib.layers.xavier_initializer())
-        
-        flatten_vec = tf.layers.flatten(out_conv3, name="flatten_vec")
-        
-        out1 = tf.layers.dense(inputs=flatten_vec, units=512, activation=tf.nn.leaky_relu, 
-                               kernel_initializer=tf.contrib.layers.xavier_initializer())
-
-        output = tf.layers.dense(inputs=out1, units=self.n_actions,
-                                 kernel_initializer=tf.contrib.layers.xavier_initializer())
-
-        if self.use_dueling:
-            out1_state = tf.layers.dense(inputs=flatten_vec, units=512, activation=tf.nn.leaky_relu, 
-                                        kernel_initializer=tf.contrib.layers.xavier_initializer())
-            out_state = tf.layers.dense(inputs=out1_state, units=1, 
-                                        kernel_initializer=tf.contrib.layers.xavier_initializer())
-            output_action = output - tf.reduce_mean(output, axis=1, keepdims=True)
-            output = tf.add(output_action, out_state)
-
-        return output
-
 
     def _add_saver(self):
         # self.saver = tf.train.Saver(tf.global_variables(), max_to_keep=10)
@@ -131,7 +164,7 @@ class DQN:
 
 
     def predict(self, session, states):
-        return session.run(self.output_eval, feed_dict={self.states: states})
+        return session.run(self.eval_output, feed_dict={self.states: states})
 
 
     def save(self, sess, checkpoint_prefix):
@@ -171,6 +204,7 @@ class Agent_DQN(Agent):
             gamma = 0.95,    # discount factor
             learning_rate = 0.00015,
             use_dueling = False,
+            use_ddqn = True,
             checkpoint_path = "./runs/checkpoints/dqn",
             history_rewards_file = "./history_rewards.npy",
             save_interval = 2000,
