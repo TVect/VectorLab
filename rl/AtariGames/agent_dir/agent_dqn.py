@@ -286,6 +286,8 @@ class Agent_DQN(Agent):
 
         # 记录训练历史.
         np.save(self.hparams.history_rewards_file, self.history_rewards)
+        # 保存最终的模型
+        self.dqn.save(self.session, self.hparams.checkpoint_path)
 
 
     def make_action(self, observation, test=True):
@@ -301,7 +303,8 @@ class Agent_DQN(Agent):
                 the predicted action from trained model
         """
         # epsilon 逐渐减小
-        if self.epsilon > self.hparams.epsilon_min:
+        if (self.epsilon > self.hparams.epsilon_min) \
+                and (self.i_step > self.hparams.init_step):
             self.epsilon = self.epsilon - self.epsilon_decay
 
         if test:
