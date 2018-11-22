@@ -172,11 +172,12 @@ class DQN:
         return session.run(self.eval_output, feed_dict={self.states: states})
 
 
-    def save(self, sess, checkpoint_prefix):
-        checkpoint_dir = os.path.dirname(checkpoint_prefix)
+    def save(self, sess, checkpoint_dir):
         if not os.path.exists(checkpoint_dir):
             os.makedirs(checkpoint_dir)
-        self.saver.save(sess, checkpoint_prefix, global_step=self.global_step)
+        self.saver.save(sess, 
+                        os.path.join(checkpoint_dir, "dqn-model"), 
+                        global_step=self.global_step)
 
 
     def load(self, sess, checkpoint_dir):
@@ -207,10 +208,10 @@ class Agent_DQN(Agent):
             epsilon_min = 0.025,
             n_obs = list(self.env.env.observation_space.shape),
             gamma = 0.99,    # discount factor
-            learning_rate = 0.00015,
+            learning_rate = 1e-4,
             use_dueling = False,
             use_ddqn = False,
-            checkpoint_path = "./checkpoints/agent_dqn/dqn",
+            checkpoint_path = "./checkpoints/agent_dqn",
             history_rewards_file = "./history_rewards.npy",
             save_interval = 100000,
             target_update_interval = 1000,

@@ -93,12 +93,12 @@ class Policy:
         return sess.run(self.act_probs, feed_dict={self.states: states})
 
 
-    def save(self, sess, checkpoint_prefix):
-        checkpoint_dir = os.path.dirname(checkpoint_prefix)
+    def save(self, sess, checkpoint_dir):
         if not os.path.exists(checkpoint_dir):
             os.makedirs(checkpoint_dir)
-        self.saver.save(sess, checkpoint_prefix)
-        self.saver.save(sess, checkpoint_prefix, global_step=self.global_step)
+        self.saver.save(sess, 
+                        os.path.join(checkpoint_dir, "pg-model"), 
+                        global_step=self.global_step)
 
 
     def load(self, sess, checkpoint_dir):
@@ -196,7 +196,7 @@ class Agent_PG(Agent):
                 tf.logging.info('\tep {}: reward: {}'.format(i_episode, reward_sum))
 
             if i_episode % 100 == 0:
-                self.model.save(self.sess, "./runs/checkpoints/model")
+                self.model.save(self.sess, "./runs/checkpoints")
 
 
     def make_action(self, observation, test=True):
