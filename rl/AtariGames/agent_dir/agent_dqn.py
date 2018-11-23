@@ -265,13 +265,19 @@ class Agent_DQN(Agent):
                 self.replay_buf.append([state, action, reward, next_state, int(done)])
                 state = next_state
                 cumulate_reward += reward
-            
+                
+                # train dqn
                 if (self.i_step >= self.hparams.init_step) \
                         and (self.i_step % self.hparams.train_interval == 0):
                     self.dqn.train(self.session, self.replay_buf)
+                # copy dqn parameters to the target net
                 if (self.i_step >= self.hparams.init_step) \
                         and (self.i_step % self.hparams.target_update_interval == 0):
                     self.dqn.cp2targetnet(self.session)
+                # save dqn
+                if self.i_step % self.hparams.save_interval == 0:
+                    self.dqn.save(self.session, self.hparams.checkpoint_path)
+
 
             running_reward = cumulate_reward if running_reward is None \
                             else running_reward * 0.99 + cumulate_reward * 0.01          
@@ -281,9 +287,6 @@ class Agent_DQN(Agent):
                             'EPSILON: {:.5f} | CUR_REWARD: {:2.3f} | AVG_REWARD: {:2.3f}'.format(
                             i_episode, episode_steps, self.i_step, 
                             self.epsilon, cumulate_reward, running_reward))
-
-            if self.i_step % self.hparams.save_interval == 0:
-                self.dqn.save(self.session, self.hparams.checkpoint_path)
 
         # 记录训练历史.
         np.save(self.hparams.history_rewards_file, self.history_rewards)
@@ -303,15 +306,18 @@ class Agent_DQN(Agent):
             action: int
                 the predicted action from trained model
         """
-        # epsilon 逐渐减小
-        if (self.epsilon > self.hparams.epsilon_min) \
-                and (self.i_step > self.hparams.init_step):
-            self.epsilon = self.epsilon - self.epsilon_decay
-
         if test:
+            # epsilon-greedy
+            if random.random() < self.hparams.epsilon_min:
+                return random.randrange(self.hparams.n_actions)
             output = self.dqn.predict(self.session, [observation])
             return np.argmax(output[0])
         else:
+            # epsilon 逐渐减小
+            if (self.epsilon > self.hparams.epsilon_min) \
+                    and (self.i_step > self.hparams.init_step):
+                self.epsilon = self.epsilon - self.epsilon_decay
+
             # epsilon-greedy
             if random.random() < self.epsilon:
                 return random.randrange(self.hparams.n_actions)

@@ -53,6 +53,56 @@ testing DQN:
 
 	Ideally you’d want to feed at least 2 frames to the policy network so that it can detect motion. To make things a bit simpler (I did these experiments on my Macbook) I’ll do a tiny bit of preprocessing, e.g. we’ll actually feed difference frames to the network (i.e. subtraction of current and last frame).
 
+# 结果
+## Pong: policy gradient
+
+## BreakoutNoFrameskip: dqn
+
+- Improvements to DQN:
+	- [x] Double Q-Learning
+ 	- [x] Dueling Network
+ 	- [ ] Prioritized Replay Memory
+ 	- [ ] Noisy DQN
+ 	- [ ] Distributional DQN
+
+- Training Hint
+	- The action should act ε-greedily
+ 		- [x] Random action with probability ε
+ 		- [x] Also in testing
+	- Linearly decline ε from 1.0 to some small value, say 0.025
+ 		- [x] Decline per step
+ 		- [x] Randomness is for exploration, agent is weak at start
+- Hyperparameters
+	- [x] Replay Memory Size 10000
+	- [x] Perform Update Current Network Step 4
+	- [x] Perform Update Target Network Step 1000
+	- [x] Learning Rate 1e-4
+	- [x] Batch Size 32
+
+### Learning Curve
+
+- DQN + Double Q-Learning + Dueling Network
+![dqn_rewards](./results/dqn_rewards.png)
+
+### 测试结果
+```
+test episode: 0, reward: 293.0, i_steps: 1263
+test episode: 1, reward: 19.0, i_steps: 174
+test episode: 2, reward: 8.0, i_steps: 68
+test episode: 3, reward: 72.0, i_steps: 358
+test episode: 4, reward: 24.0, i_steps: 125
+test episode: 5, reward: 14.0, i_steps: 523
+... ...
+test episode: 95, reward: 10.0, i_steps: 406
+test episode: 96, reward: 4.0, i_steps: 167
+test episode: 97, reward: 8.0, i_steps: 197
+test episode: 98, reward: 96.0, i_steps: 640
+test episode: 99, reward: 188.0, i_steps: 475
+Run 100 episodes
+Mean: 72.59
+```
+
+
 # 其他参考资料
 
 - [Learning to Play Pong using Policy Gradient Learning](https://arxiv.org/abs/1807.08452)
